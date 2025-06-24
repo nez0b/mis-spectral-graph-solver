@@ -69,6 +69,9 @@ class ProjectedGradientDescentOracle(Oracle):
             verbose=verbose
         )
         
+        # Enable verbose oracle call tracking if verbose is True
+        self.verbose_oracle_calls = verbose
+        
         # Store optimization history for debugging
         self.last_histories: List[jnp.ndarray] = []
         self.last_final_energies: List[float] = []

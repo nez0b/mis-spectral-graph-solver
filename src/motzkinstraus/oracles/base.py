@@ -22,6 +22,7 @@ class Oracle(ABC):
     
     def __init__(self):
         self.call_count = 0
+        self.verbose_oracle_calls = False
     
     @property
     @abstractmethod
@@ -69,10 +70,18 @@ class Oracle(ABC):
         
         n = graph.number_of_nodes()
         
+        # Verbose progress tracking
+        if self.verbose_oracle_calls:
+            print(f"Oracle call {self.call_count}: solving {n}-node subgraph with {graph.number_of_edges()} edges...")
+        
         # Handle trivial cases
         if n == 0:
+            if self.verbose_oracle_calls:
+                print(f"  → Trivial case: empty graph, ω = 0")
             return 0
         if graph.number_of_edges() == 0:
+            if self.verbose_oracle_calls:
+                print(f"  → Trivial case: no edges, ω = 1")
             return 1
         
         # Get adjacency matrix
@@ -90,7 +99,12 @@ class Oracle(ABC):
             omega_val = 1.0 / (1.0 - 2.0 * optimal_value)
         
         # Round to nearest integer to handle floating point precision
-        return round(omega_val)
+        omega_result = round(omega_val)
+        
+        if self.verbose_oracle_calls:
+            print(f"  → Solved: optimal_value = {optimal_value:.6f}, ω = {omega_result}")
+        
+        return omega_result
     
     def __call__(self, graph: nx.Graph) -> int:
         """

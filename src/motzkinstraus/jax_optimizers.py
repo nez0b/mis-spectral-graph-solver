@@ -224,35 +224,56 @@ def run_projected_gradient_descent(
     else:
         x = jnp.ones(num_vars) / num_vars
     
-    energy_history_list = []
-    previous_energy = jnp.inf
+    # Use JAX arrays for energy history to be vmap-compatible
+    energy_history = jnp.zeros(config.max_iterations + 1)
     
     if config.verbose:
         initial_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
         print(f"PGD Initial Energy: {initial_energy:.6f}")
-        previous_energy = initial_energy
-        energy_history_list.append(float(initial_energy))
+        # For non-vmap case, we can set the first element
+        energy_history = energy_history.at[0].set(initial_energy)
+    else:
+        # For vmap case, always compute initial energy
+        initial_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
+        energy_history = energy_history.at[0].set(initial_energy)
     
-    # Optimization loop
-    for i in range(config.max_iterations):
-        x = pgd_step(x, config.learning_rate, poly_indices, poly_coefficients)
-        current_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
-        energy_history_list.append(float(current_energy))
+    previous_energy = initial_energy
+    final_iteration = config.max_iterations
+    
+    # Optimization loop using jax.lax.fori_loop for vmap compatibility
+    def body_fun(i, state):
+        x, energy_history, previous_energy, converged = state
         
-        # Early stopping check
+        # Skip if already converged
+        x_new = jax.lax.cond(
+            converged,
+            lambda x: x,
+            lambda x: pgd_step(x, config.learning_rate, poly_indices, poly_coefficients),
+            x
+        )
+        
+        current_energy = evaluate_polynomial(x_new, poly_indices, poly_coefficients)
+        energy_history = energy_history.at[i + 1].set(current_energy)
+        
+        # Check convergence
         energy_change = jnp.abs(current_energy - previous_energy)
-        if i >= config.min_iterations and energy_change < config.tolerance:
-            if config.verbose:
-                print(f"PGD converged at iteration {i+1}, energy change: {energy_change:.6g}")
-            break
-            
-        previous_energy = current_energy
+        new_converged = converged | ((i >= config.min_iterations) & (energy_change < config.tolerance))
         
-        if config.verbose and (i + 1) % (config.max_iterations // 10 or 1) == 0:
-            print(f"PGD Iter {i+1}/{config.max_iterations}, Energy: {current_energy:.6f}")
+        return x_new, energy_history, current_energy, new_converged
     
-    energy_history = jnp.array(energy_history_list)
-    return x, energy_history
+    # Initial state: (x, energy_history, previous_energy, converged)
+    initial_state = (x, energy_history, previous_energy, False)
+    
+    # Run optimization loop
+    final_x, final_energy_history, _, _ = jax.lax.fori_loop(
+        0, config.max_iterations, body_fun, initial_state
+    )
+    
+    if config.verbose:
+        final_energy = final_energy_history[-1]
+        print(f"PGD Final Energy: {final_energy:.6f}")
+    
+    return final_x, final_energy_history
 
 
 def run_mirror_descent(
@@ -301,35 +322,54 @@ def run_mirror_descent(
     else:
         x = jnp.ones(num_vars) / num_vars
     
-    energy_history_list = []
-    previous_energy = jnp.inf
+    # Use JAX arrays for energy history to be vmap-compatible
+    energy_history = jnp.zeros(config.max_iterations + 1)
     
     if config.verbose:
         initial_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
         print(f"MD Initial Energy: {initial_energy:.6f}")
-        previous_energy = initial_energy
-        energy_history_list.append(float(initial_energy))
+        energy_history = energy_history.at[0].set(initial_energy)
+    else:
+        # For vmap case, always compute initial energy
+        initial_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
+        energy_history = energy_history.at[0].set(initial_energy)
     
-    # Optimization loop
-    for i in range(config.max_iterations):
-        x = md_step(x, config.learning_rate, poly_indices, poly_coefficients, epsilon)
-        current_energy = evaluate_polynomial(x, poly_indices, poly_coefficients)
-        energy_history_list.append(float(current_energy))
+    previous_energy = initial_energy
+    
+    # Optimization loop using jax.lax.fori_loop for vmap compatibility
+    def body_fun(i, state):
+        x, energy_history, previous_energy, converged = state
         
-        # Early stopping check
+        # Skip if already converged
+        x_new = jax.lax.cond(
+            converged,
+            lambda x: x,
+            lambda x: md_step(x, config.learning_rate, poly_indices, poly_coefficients, epsilon),
+            x
+        )
+        
+        current_energy = evaluate_polynomial(x_new, poly_indices, poly_coefficients)
+        energy_history = energy_history.at[i + 1].set(current_energy)
+        
+        # Check convergence
         energy_change = jnp.abs(current_energy - previous_energy)
-        if i >= config.min_iterations and energy_change < config.tolerance:
-            if config.verbose:
-                print(f"MD converged at iteration {i+1}, energy change: {energy_change:.6g}")
-            break
-            
-        previous_energy = current_energy
+        new_converged = converged | ((i >= config.min_iterations) & (energy_change < config.tolerance))
         
-        if config.verbose and (i + 1) % (config.max_iterations // 10 or 1) == 0:
-            print(f"MD Iter {i+1}/{config.max_iterations}, Energy: {current_energy:.6f}")
+        return x_new, energy_history, current_energy, new_converged
     
-    energy_history = jnp.array(energy_history_list)
-    return x, energy_history
+    # Initial state: (x, energy_history, previous_energy, converged)
+    initial_state = (x, energy_history, previous_energy, False)
+    
+    # Run optimization loop
+    final_x, final_energy_history, _, _ = jax.lax.fori_loop(
+        0, config.max_iterations, body_fun, initial_state
+    )
+    
+    if config.verbose:
+        final_energy = final_energy_history[-1]
+        print(f"MD Final Energy: {final_energy:.6f}")
+    
+    return final_x, final_energy_history
 
 
 def run_multi_restart_optimization(
@@ -341,7 +381,7 @@ def run_multi_restart_optimization(
     seed: int = 42
 ) -> Tuple[jnp.ndarray, float, List[jnp.ndarray], List[float]]:
     """
-    Run optimization with multiple Dirichlet initializations.
+    Run optimization with multiple Dirichlet initializations using jax.vmap for parallel execution.
     
     Args:
         poly_indices: Polynomial term indices.
@@ -364,42 +404,75 @@ def run_multi_restart_optimization(
     key, subkey = jax.random.split(key)
     initial_states = sample_dirichlet(subkey, alpha, sample_shape=(config.num_restarts,))
     
-    all_histories = []
-    all_final_energies = []
-    best_energy = -jnp.inf  # We're maximizing
-    best_x = None
+    # Generate integer seeds for each restart (for compatibility with existing functions)
+    restart_seeds = jnp.arange(config.num_restarts) + seed
     
     if config.verbose:
-        print(f"Running {algorithm.upper()} with {config.num_restarts} restarts...")
+        print(f"Running {algorithm.upper()} with {config.num_restarts} restarts using jax.vmap...")
     
-    for i in range(config.num_restarts):
-        x_init = initial_states[i]
+    # Choose algorithm and create vectorized version
+    if algorithm == "pgd":
+        # Create a non-verbose config for batched execution
+        batch_config = JAXOptimizerConfig(
+            learning_rate=config.learning_rate,
+            max_iterations=config.max_iterations,
+            tolerance=config.tolerance,
+            min_iterations=config.min_iterations,
+            num_restarts=config.num_restarts,
+            dirichlet_alpha=config.dirichlet_alpha,
+            verbose=False  # Disable verbose for vmap (JAX can't trace print statements)
+        )
         
-        if algorithm == "pgd":
-            x_final, history = run_projected_gradient_descent(
-                poly_indices, poly_coefficients, num_vars, config, x_init, seed + i
-            )
-        elif algorithm == "md":
-            x_final, history = run_mirror_descent(
-                poly_indices, poly_coefficients, num_vars, config, x_init, seed + i
-            )
-        else:
-            raise ValueError(f"Unknown algorithm: {algorithm}")
+        # Create vectorized PGD function
+        # in_axes: (None, None, None, None, 0, 0) -> vmap over initial_states, restart_seeds
+        vmapped_optimizer = jax.vmap(
+            run_projected_gradient_descent,
+            in_axes=(None, None, None, None, 0, 0)  # poly_indices, poly_coefficients, num_vars, config, x_init, seed
+        )
         
-        final_energy = float(history[-1])
-        all_histories.append(history)
-        all_final_energies.append(final_energy)
+        # Run all restarts in parallel
+        all_final_x, all_histories_jax = vmapped_optimizer(
+            poly_indices, poly_coefficients, num_vars, batch_config, initial_states, restart_seeds
+        )
         
-        # Track best solution
-        if final_energy > best_energy:
-            best_energy = final_energy
-            best_x = x_final
+    elif algorithm == "md":
+        # Create a non-verbose config for batched execution
+        batch_config = JAXOptimizerConfig(
+            learning_rate=config.learning_rate,
+            max_iterations=config.max_iterations,
+            tolerance=config.tolerance,
+            min_iterations=config.min_iterations,
+            num_restarts=config.num_restarts,
+            dirichlet_alpha=config.dirichlet_alpha,
+            verbose=False  # Disable verbose for vmap (JAX can't trace print statements)
+        )
         
-        if config.verbose:
-            print(f"  Restart {i+1}/{config.num_restarts}: Energy = {final_energy:.6f}")
+        # Create vectorized MD function  
+        vmapped_optimizer = jax.vmap(
+            run_mirror_descent,
+            in_axes=(None, None, None, None, 0, 0, None)  # epsilon is broadcasted
+        )
+        
+        # Run all restarts in parallel
+        all_final_x, all_histories_jax = vmapped_optimizer(
+            poly_indices, poly_coefficients, num_vars, batch_config, initial_states, restart_seeds, 1e-9
+        )
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm}")
+    
+    # Convert JAX arrays to Python lists for compatibility
+    all_histories = [jnp.array(hist) for hist in all_histories_jax]
+    all_final_energies = [float(hist[-1]) for hist in all_histories]
+    
+    # Find best solution
+    best_idx = int(jnp.argmax(jnp.array(all_final_energies)))
+    best_x = all_final_x[best_idx]
+    best_energy = all_final_energies[best_idx]
     
     if config.verbose:
-        print(f"Best energy: {best_energy:.6f}")
+        for i, energy in enumerate(all_final_energies):
+            print(f"  Restart {i+1}/{config.num_restarts}: Energy = {energy:.6f}")
+        print(f"Best energy: {best_energy:.6f} (restart {best_idx+1})")
         print(f"Energy range: [{min(all_final_energies):.6f}, {max(all_final_energies):.6f}]")
     
     return best_x, best_energy, all_histories, all_final_energies
