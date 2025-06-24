@@ -1,0 +1,29 @@
+[project]
+name = "motzkinstraus"
+version = "0.1.0"
+description = "Maximum Independent Set solver using the Motzkin-Straus theorem"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=2.6.3,<3",
+    "numpy>=1.20.0",
+    "matplotlib>=3.5.0",
+    "gurobipy>=12.0.2",
+    "qci-client>=4.5.0",
+    "eqc-models>=0.12.0",
+]
+
+[project.optional-dependencies]
+gurobi = ["gurobipy>=11.0.0"]
+dirac = ["qci-client", "eqc-models"]
+all = ["gurobipy>=11.0.0", "qci-client", "eqc-models"]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
