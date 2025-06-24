@@ -26,6 +26,18 @@ def get_available_oracles() -> List[Type[Oracle]]:
     except ImportError:
         pass
     
+    try:
+        from .jax_pgd import ProjectedGradientDescentOracle
+        available.append(ProjectedGradientDescentOracle)
+    except ImportError:
+        pass
+    
+    try:
+        from .jax_mirror import MirrorDescentOracle
+        available.append(MirrorDescentOracle)
+    except ImportError:
+        pass
+    
     return available
 
 __all__ = ["Oracle", "get_available_oracles"]
