@@ -11,6 +11,9 @@ dependencies = [
     "gurobipy>=12.0.2",
     "qci-client>=4.5.0",
     "eqc-models>=0.12.0",
+    "jax>=0.5.3",
+    "jaxlib>=0.5.3",
+    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]

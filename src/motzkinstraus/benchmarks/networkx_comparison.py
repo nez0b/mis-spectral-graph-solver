@@ -17,6 +17,12 @@ from ..oracles.jax_pgd import ProjectedGradientDescentOracle
 from ..oracles.jax_mirror import MirrorDescentOracle
 
 try:
+    from ..oracles.jax_frank_wolfe import FrankWolfeOracle
+    FRANK_WOLFE_AVAILABLE = True
+except ImportError:
+    FRANK_WOLFE_AVAILABLE = False
+
+try:
     from ..oracles.gurobi import GurobiOracle
     GUROBI_AVAILABLE = True
 except ImportError:
@@ -357,7 +363,7 @@ class NetworkXComparisonBenchmark:
             )
     
     def run_jax_oracle(self, graph: nx.Graph, algorithm: str = "pgd") -> BenchmarkResult:
-        """Run JAX-based oracle (PGD or Mirror Descent)."""
+        """Run JAX-based oracle (PGD, Mirror Descent, or Frank-Wolfe)."""
         graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
         
         try:
@@ -380,6 +386,16 @@ class NetworkXComparisonBenchmark:
                     verbose=self.jax_config['verbose']
                 )
                 alg_name = "JAX_MirrorDescent"
+            elif algorithm.lower() == "fw" or algorithm.lower() == "frank_wolfe" or algorithm.lower() == "frank-wolfe":
+                if not FRANK_WOLFE_AVAILABLE:
+                    raise ValueError("Frank-Wolfe oracle not available")
+                oracle = FrankWolfeOracle(
+                    num_restarts=self.jax_config['num_restarts'],
+                    max_iterations=self.jax_config['max_iterations'],
+                    tolerance=self.jax_config['tolerance'],
+                    verbose=self.jax_config['verbose']
+                )
+                alg_name = "JAX_FrankWolfe"
             else:
                 raise ValueError(f"Unknown JAX algorithm: {algorithm}")
             
@@ -711,6 +727,7 @@ def run_algorithm_comparison(
             - "nx_exact": NetworkX exact via complement + cliques
             - "jax_pgd": JAX Projected Gradient Descent
             - "jax_md": JAX Mirror Descent
+            - "jax_fw": JAX Frank-Wolfe (conditional gradient)
             - "gurobi": Gurobi exact (if available)
             - "dirac": Dirac-3 continuous cloud solver (if available)
             - "dirac_hybrid": Hybrid Dirac/NetworkX solver (auto-switches based on graph size)
@@ -744,6 +761,8 @@ def run_algorithm_comparison(
                 result = benchmark.run_jax_oracle(graph, "pgd")
             elif alg == "jax_md" or alg == "jax_mirror":
                 result = benchmark.run_jax_oracle(graph, "md")
+            elif alg == "jax_fw" or alg == "jax_frank_wolfe" or alg == "frank_wolfe":
+                result = benchmark.run_jax_oracle(graph, "fw")
             elif alg == "gurobi":
                 result = benchmark.run_gurobi_oracle(graph)
             elif alg == "dirac":
