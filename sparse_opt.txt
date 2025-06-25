@@ -1,0 +1,47 @@
+Based on the theoretical complexity analysis, here's a plan to optimize our PGD implementation for better scaling:                                           │ │
+│ │                                                                                                                                                              │ │
+│ │ PGD Scaling Optimization Plan                                                                                                                                │ │
+│ │                                                                                                                                                              │ │
+│ │ Phase 1: Implement Sparse Matrix Support                                                                                                                     │ │
+│ │                                                                                                                                                              │ │
+│ │ 1. Add sparse adjacency matrix representation                                                                                                                │ │
+│ │   - Use jax.experimental.sparse.BCOO format                                                                                                                  │ │
+│ │   - Modify adjacency_to_polynomial to handle sparse matrices                                                                                                 │ │
+│ │   - Update matrix-vector multiplication in gradient computation                                                                                              │ │
+│ │ 2. Benchmark sparse vs dense performance                                                                                                                     │ │
+│ │   - Test crossover point where sparse becomes beneficial                                                                                                     │ │
+│ │   - Measure memory usage reduction                                                                                                                           │ │
+│ │   - Profile computational speedup for different graph densities                                                                                              │ │
+│ │                                                                                                                                                              │ │
+│ │ Phase 2: Complexity Analysis Validation                                                                                                                      │ │
+│ │                                                                                                                                                              │ │
+│ │ 3. Empirical scaling studies                                                                                                                                 │ │
+│ │   - Test graphs from n=10 to n=1000+ nodes                                                                                                                   │ │
+│ │   - Measure per-iteration time vs theoretical O(n²) and O(|E| + n log n)                                                                                     │ │
+│ │   - Analyze iteration count K scaling with graph size                                                                                                        │ │
+│ │   - Document memory usage patterns                                                                                                                           │ │
+│ │ 4. Bottleneck identification                                                                                                                                 │ │
+│ │   - Profile matrix-vector multiplication vs simplex projection                                                                                               │ │
+│ │   - Identify when projection sorting becomes dominant                                                                                                        │ │
+│ │   - Measure JAX JIT compilation overhead impact                                                                                                              │ │
+│ │                                                                                                                                                              │ │
+│ │ Phase 3: Performance Optimization                                                                                                                            │ │
+│ │                                                                                                                                                              │ │
+│ │ 5. Adaptive matrix representation                                                                                                                            │ │
+│ │   - Automatically choose sparse vs dense based on graph density                                                                                              │ │
+│ │   - Implement density threshold for optimal performance                                                                                                      │ │
+│ │   - Add configuration options for manual override                                                                                                            │ │
+│ │ 6. Hardware utilization improvements                                                                                                                         │ │
+│ │   - Optimize for GPU acceleration with sparse matrices                                                                                                       │ │
+│ │   - Fine-tune vmap batch sizes for different graph sizes                                                                                                     │ │
+│ │   - Implement memory-efficient batching strategies                                                                                                           │ │
+│ │                                                                                                                                                              │ │
+│ │ Expected Outcomes:                                                                                                                                           │ │
+│ │                                                                                                                                                              │ │
+│ │ - 10-100x speedup for large sparse graphs through sparse matrix usage                                                                                        │ │
+│ │ - Scalability to 1000+ node graphs with manageable memory usage                                                                                              │ │
+│ │ - Empirical validation of theoretical O(|E| + n log n) complexity                                                                                            │ │
+│ │ - Performance guidelines for choosing algorithms based on graph characteristics                                                                              │ │
+│ │                                                                                                                                                              │ │
+│ │ This plan addresses the fundamental scaling limitations identified in the theoretical analysis and provides a path to handle much larger graph instances     │ │
+│ │ efficiently.

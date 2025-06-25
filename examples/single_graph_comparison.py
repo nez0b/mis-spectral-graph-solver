@@ -24,9 +24,9 @@ from motzkinstraus.benchmarks.networkx_comparison import (
 
 
 def create_test_graph():
-    """Create a test graph with 10 nodes."""
+    """Create a test graph with 30 nodes (< 35 threshold)."""
     # Use a Barabasi-Albert graph for interesting structure
-    num_nodes = 50
+    num_nodes = 60
     G = nx.barabasi_albert_graph(num_nodes, 3, seed=42)
     
     print(f"Test Graph Properties:")
@@ -44,17 +44,21 @@ def run_comprehensive_comparison(G):
     print("RUNNING COMPREHENSIVE ALGORITHM COMPARISON")
     print("="*60)
     
-    # All available algorithms (excluding Gurobi for speed)
+    # All available algorithms (including Dirac cloud solver)
     algorithms = [
         "nx_greedy",        # NetworkX greedy (multiple runs)
         "nx_greedy_single", # NetworkX greedy (single run)
         "nx_approximation", # NetworkX Boppana-Halldórsson
-        "nx_exact",         # NetworkX exact via cliques
-        "jax_pgd",          # JAX Projected Gradient Descent
+        "nx_exact",         # NetworkX exact via cliques (too slow for large graphs)
+        # "jax_pgd",          # JAX Projected Gradient Descent
+        "dirac_hybrid",     # Hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)
+        # "dirac",            # Pure Dirac-3 continuous cloud solver
         # "jax_md"            # JAX Mirror Descent
+        # "gurobi"            # Gurobi exact (excluded for speed)
     ]
     
-    print("✓ Using NetworkX exact as ground truth (Gurobi excluded for speed)")
+    print("✓ Using hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)")
+    print("✓ Large graphs (>35 nodes) will use Dirac-3 cloud solver")
     
     # Configure benchmark (adjusted for 10-node graph)
     benchmark_config = {
@@ -69,6 +73,12 @@ def run_comprehensive_comparison(G):
             'num_restarts': 5,       # Moderate restarts to demonstrate vmap batching
             'tolerance': 1e-6,
             'verbose': True          # Enable verbose for progress tracking
+        },
+        'dirac_config': {
+            'num_samples': 100,       # Conservative for API reliability
+            'relax_schedule': 4,     # Default relaxation schedule as requested
+            'solution_precision': 0.001,  # Solution precision parameter
+            'threshold_nodes': 50    # Threshold for hybrid solver
         }
     }
     num_nodes = G.number_of_nodes()

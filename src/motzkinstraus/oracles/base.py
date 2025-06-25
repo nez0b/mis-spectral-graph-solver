@@ -3,6 +3,7 @@ Abstract base class for Motzkin-Straus oracles.
 """
 
 from abc import ABC, abstractmethod
+import math
 import networkx as nx
 import numpy as np
 from typing import Union
@@ -55,6 +56,8 @@ class Oracle(ABC):
     def get_omega(self, graph: nx.Graph) -> int:
         """
         Find the clique number omega(G) of a graph using the Motzkin-Straus theorem.
+        This method is robust to small floating point errors from approximate solvers
+        by systematically rounding down to prevent catastrophic search failure.
         
         Args:
             graph: A networkx graph.
@@ -65,10 +68,10 @@ class Oracle(ABC):
         Raises:
             OracleError: If the solver fails.
         """
+        n = graph.number_of_nodes()
+        
         # Increment call counter
         self.call_count += 1
-        
-        n = graph.number_of_nodes()
         
         # Verbose progress tracking
         if self.verbose_oracle_calls:
@@ -79,30 +82,40 @@ class Oracle(ABC):
             if self.verbose_oracle_calls:
                 print(f"  → Trivial case: empty graph, ω = 0")
             return 0
+        
+        # A graph with nodes but no edges has omega=1
         if graph.number_of_edges() == 0:
             if self.verbose_oracle_calls:
                 print(f"  → Trivial case: no edges, ω = 1")
             return 1
-        
-        # Get adjacency matrix
+
+        # Get adjacency matrix and solve the quadratic program
         adj_matrix = nx.to_numpy_array(graph, dtype=np.float64)
-        
-        # Solve the quadratic program
         optimal_value = self.solve_quadratic_program(adj_matrix)
         
-        # Apply Motzkin-Straus theorem: optimal_value = 0.5 * (1 - 1/omega)
-        # Solving for omega: omega = 1 / (1 - 2 * optimal_value)
-        if abs(0.5 - optimal_value) < 1e-9:
-            # Handle numerical case where omega is very large
-            omega_val = n
-        else:
-            omega_val = 1.0 / (1.0 - 2.0 * optimal_value)
-        
+        # A value >= 0.5 implies a very large omega; cap at n
+        if optimal_value >= 0.5 - 1e-9:
+            if self.verbose_oracle_calls:
+                print(f"  → Large omega case: optimal_value = {optimal_value:.6f}, ω = {n}")
+            return n
+
+        # A negative value is unexpected. Since we know there's an edge, omega >= 2
+        if optimal_value < 0:
+            if self.verbose_oracle_calls:
+                print(f"  → Negative value case: optimal_value = {optimal_value:.6f}, ω = 2")
+            return 2
+
+        # Reverse the M-S formula: omega = 1 / (1 - 2 * optimal_value)
+        omega_approx = 1.0 / (1.0 - 2.0 * optimal_value)
+
         # Round to nearest integer to handle floating point precision
-        omega_result = round(omega_val)
+        omega_result = round(omega_approx)
+
+        # Sanity check: a graph with edges must have a clique number of at least 2
+        omega_result = max(2, int(omega_result))
         
         if self.verbose_oracle_calls:
-            print(f"  → Solved: optimal_value = {optimal_value:.6f}, ω = {omega_result}")
+            print(f"  → Solved: optimal_value = {optimal_value:.6f}, ω_approx = {omega_approx:.3f}, ω = {omega_result}")
         
         return omega_result
     

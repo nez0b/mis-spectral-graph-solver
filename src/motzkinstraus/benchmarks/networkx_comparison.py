@@ -22,6 +22,18 @@ try:
 except ImportError:
     GUROBI_AVAILABLE = False
 
+try:
+    from ..oracles.dirac import DiracOracle
+    DIRAC_AVAILABLE = True
+except ImportError:
+    DIRAC_AVAILABLE = False
+
+try:
+    from ..oracles.dirac_hybrid import DiracNetworkXHybridOracle
+    DIRAC_HYBRID_AVAILABLE = True
+except ImportError:
+    DIRAC_HYBRID_AVAILABLE = False
+
 
 @dataclass
 class BenchmarkResult:
@@ -84,6 +96,14 @@ class NetworkXComparisonBenchmark:
                 'num_restarts': 10,
                 'tolerance': 1e-6,
                 'verbose': False
+            }
+        
+        if not hasattr(self, 'dirac_config'):
+            self.dirac_config = {
+                'num_samples': 10,
+                'relax_schedule': 2,
+                'solution_precision': 0.001,
+                'threshold_nodes': 35  # For hybrid solver
             }
         
         # Apply custom settings
@@ -485,6 +505,192 @@ class NetworkXComparisonBenchmark:
                 error_message=str(e)
             )
 
+    def run_dirac_oracle(self, graph: nx.Graph) -> BenchmarkResult:
+        """Run Dirac-3 continuous cloud solver oracle."""
+        graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+        
+        if not DIRAC_AVAILABLE:
+            return BenchmarkResult(
+                algorithm_name="Dirac-3",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message="Dirac solver not available (install qci-client and eqc-models)"
+            )
+        
+        try:
+            # Use configuration from benchmark_config if available
+            dirac_config = getattr(self, 'dirac_config', {})
+            num_samples = dirac_config.get('num_samples', 10)
+            relax_schedule = dirac_config.get('relax_schedule', 2)
+            solution_precision = dirac_config.get('solution_precision', 0.001)
+            oracle = DiracOracle(
+                num_samples=num_samples, 
+                relax_schedule=relax_schedule,
+                solution_precision=solution_precision
+            )
+            from ..algorithms import find_mis_with_oracle
+            
+            start_time = time.time()
+            independent_set, oracle_calls = self._run_with_timeout(
+                find_mis_with_oracle,
+                self.slow_timeout,  # Use slow timeout for cloud API
+                graph,
+                oracle
+            )
+            runtime = time.time() - start_time
+            
+            return BenchmarkResult(
+                algorithm_name="Dirac-3",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=list(independent_set),
+                set_size=len(independent_set),
+                runtime_seconds=runtime,
+                oracle_calls=oracle_calls
+            )
+            
+        except TimeoutError:
+            return BenchmarkResult(
+                algorithm_name="Dirac-3",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=self.slow_timeout,
+                success=False,
+                timeout=True,
+                error_message="Timeout exceeded"
+            )
+        except Exception as e:
+            return BenchmarkResult(
+                algorithm_name="Dirac-3",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message=str(e)
+            )
+
+    def run_dirac_hybrid_oracle(self, graph: nx.Graph) -> BenchmarkResult:
+        """Run Dirac/NetworkX hybrid solver that automatically chooses based on graph size."""
+        graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+        
+        if not DIRAC_HYBRID_AVAILABLE:
+            return BenchmarkResult(
+                algorithm_name="Dirac-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message="Dirac hybrid solver not available"
+            )
+        
+        try:
+            # Use configuration from benchmark_config if available
+            dirac_config = getattr(self, 'dirac_config', {})
+            threshold_nodes = dirac_config.get('threshold_nodes', 35)
+            num_samples = dirac_config.get('num_samples', 10)
+            relax_schedule = dirac_config.get('relax_schedule', 2)
+            solution_precision = dirac_config.get('solution_precision', 0.001)
+            
+            oracle = DiracNetworkXHybridOracle(
+                threshold_nodes=threshold_nodes,
+                num_samples=num_samples,
+                relax_schedule=relax_schedule,
+                solution_precision=solution_precision
+            )
+            
+            # Enable verbose mode if configured
+            oracle.verbose_oracle_calls = getattr(self, 'verbose', False)
+            
+            from ..algorithms import find_mis_with_oracle
+            
+            # Get solver info for logging
+            solver_info = oracle.get_solver_info(graph.number_of_nodes())
+            print(f"  Using {solver_info['solver']} for {graph.number_of_nodes()}-node graph")
+            
+            start_time = time.time()
+            
+            # Strategy: Use constructive solver if available, otherwise fall back to search
+            if hasattr(oracle, 'solve_mis'):
+                try:
+                    # Attempt direct constructive solving
+                    oracle.call_count = 0  # Reset counter
+                    independent_set = oracle.solve_mis(graph)
+                    oracle_calls = oracle.call_count
+                    print(f"    → Used direct constructive solver")
+                except NotImplementedError:
+                    # Fallback to search-to-decision for large graphs
+                    print(f"    → Constructive method not available, using search-to-decision")
+                    independent_set, oracle_calls = self._run_with_timeout(
+                        find_mis_with_oracle,
+                        self.slow_timeout,
+                        graph,
+                        oracle
+                    )
+            else:
+                # Pure oracle - use search wrapper
+                print(f"    → Using search-to-decision wrapper")
+                independent_set, oracle_calls = self._run_with_timeout(
+                    find_mis_with_oracle,
+                    self.slow_timeout,
+                    graph,
+                    oracle
+                )
+            
+            runtime = time.time() - start_time
+            
+            return BenchmarkResult(
+                algorithm_name="Dirac-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=list(independent_set),
+                set_size=len(independent_set),
+                runtime_seconds=runtime,
+                oracle_calls=oracle_calls,
+                optimization_details={'solver_used': solver_info['solver'], 'threshold': threshold_nodes}
+            )
+            
+        except TimeoutError:
+            return BenchmarkResult(
+                algorithm_name="Dirac-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=self.slow_timeout,
+                success=False,
+                timeout=True,
+                error_message="Timeout exceeded"
+            )
+        except Exception as e:
+            return BenchmarkResult(
+                algorithm_name="Dirac-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message=str(e)
+            )
+
 
 def run_algorithm_comparison(
     graph: nx.Graph,
@@ -506,13 +712,15 @@ def run_algorithm_comparison(
             - "jax_pgd": JAX Projected Gradient Descent
             - "jax_md": JAX Mirror Descent
             - "gurobi": Gurobi exact (if available)
+            - "dirac": Dirac-3 continuous cloud solver (if available)
+            - "dirac_hybrid": Hybrid Dirac/NetworkX solver (auto-switches based on graph size)
         benchmark_config: Configuration dict for benchmark settings.
         
     Returns:
         Dictionary mapping algorithm names to BenchmarkResult objects.
     """
     if algorithms is None:
-        algorithms = ["nx_greedy", "nx_approximation", "jax_pgd", "jax_md"]
+        algorithms = ["nx_greedy", "nx_approximation", "jax_pgd", "jax_md"]  # Note: Add "dirac" manually if needed
         
     # Initialize benchmark
     config = benchmark_config or {}
@@ -538,6 +746,10 @@ def run_algorithm_comparison(
                 result = benchmark.run_jax_oracle(graph, "md")
             elif alg == "gurobi":
                 result = benchmark.run_gurobi_oracle(graph)
+            elif alg == "dirac":
+                result = benchmark.run_dirac_oracle(graph)
+            elif alg == "dirac_hybrid":
+                result = benchmark.run_dirac_hybrid_oracle(graph)
             else:
                 print(f"Unknown algorithm: {alg}")
                 continue

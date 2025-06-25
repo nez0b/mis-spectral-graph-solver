@@ -28,9 +28,10 @@ class DiracOracle(Oracle):
     Args:
         num_samples: Number of solution samples to request (default: 100).
         relax_schedule: Solver relaxation schedule parameter (default: 2).
+        solution_precision: Solution precision parameter (default: 0.001).
     """
     
-    def __init__(self, num_samples: int = 100, relax_schedule: int = 2):
+    def __init__(self, num_samples: int = 100, relax_schedule: int = 2, solution_precision: float = 0.001):
         super().__init__()
         if not self.is_available:
             raise SolverUnavailableError(
@@ -40,6 +41,7 @@ class DiracOracle(Oracle):
         
         self.num_samples = num_samples
         self.relax_schedule = relax_schedule
+        self.solution_precision = solution_precision
         
         # Test connection
         try:
@@ -109,13 +111,15 @@ class DiracOracle(Oracle):
             solver = Dirac3ContinuousCloudSolver()
             
             print(f"Submitting {n}-variable quadratic program to Dirac-3 continuous solver...")
+            print(f"Parameters: num_samples={self.num_samples}, relaxation_schedule={self.relax_schedule}, solution_precision={self.solution_precision}")
             
             # Solve with simplex constraint (sum_constraint=1)
             response = solver.solve(
                 model,
                 sum_constraint=1,  # Enforce simplex constraint: sum(x_i) = 1
                 num_samples=self.num_samples,
-                relaxation_schedule=self.relax_schedule
+                relaxation_schedule=self.relax_schedule,  # Correct parameter name
+                solution_precision=self.solution_precision
             )
             
             # Process the response

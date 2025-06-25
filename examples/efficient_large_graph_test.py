@@ -25,11 +25,13 @@ from motzkinstraus.exceptions import SolverUnavailableError
 
 def create_interesting_10_node_graph():
     """
-    Create an interesting 10-node test graph (smaller than 12 for efficiency).
+    Create an interesting 10-node test graph optimized for Dirac API testing.
     
     This creates a complex graph based on a 10-cycle with additional chord edges.
     Expected oracle calls will depend on the MIS size and search decisions.
     For a 10-node graph, typical oracle calls range from 5-15 depending on structure.
+    
+    Note: 10 nodes is a good balance between complexity and API response time.
     """
     # Create a structured graph with interesting properties
     G = nx.Graph()
@@ -183,9 +185,9 @@ def run_efficient_test():
     
     # Test Dirac Oracle
     print("\\n3. Testing Dirac-3 Oracle...")
-    print("   ⏳ This may take several minutes due to cloud queue and 10-node complexity...")
+    print("   ⏳ This may take several minutes due to cloud API latency and queue time...")
     try:
-        dirac_oracle = DiracOracle(num_samples=30, relax_schedule=1)  # Optimized for speed
+        dirac_oracle = DiracOracle(num_samples=10, relax_schedule=1)  # Conservative params for API reliability
         print("   ✓ Dirac-3 oracle initialized")
         
         start_time = time.time()
@@ -234,13 +236,15 @@ def run_efficient_test():
         
         if gurobi_time > 0 and dirac_time != float('inf'):
             speedup = dirac_time / gurobi_time
-            print(f"\\n   📈 Dirac-3 is {speedup:.1f}x slower than Gurobi (due to cloud latency)")
+            print(f"\\n   📈 Dirac-3 is {speedup:.1f}x slower than Gurobi (due to cloud API latency)")
+            print(f"   ⚠️  Note: Dirac timing varies significantly due to cloud queue and network latency")
         
         if gurobi_calls == dirac_calls:
             print(f"   ✓ Both solvers made identical oracle calls ({gurobi_calls})")
         else:
             diff = abs(gurobi_calls - dirac_calls)
             print(f"   ⚠️  Oracle call difference: {diff}")
+            print(f"   ℹ️  This may be due to numerical precision differences in cloud solving")
         
         # Create visualization
         print("\\n4. Creating dual-panel visualization...")
