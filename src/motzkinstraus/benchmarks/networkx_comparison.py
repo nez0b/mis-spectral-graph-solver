@@ -46,6 +46,20 @@ try:
 except ImportError:
     DIRAC_PGD_HYBRID_AVAILABLE = False
 
+try:
+    from ..solvers.milp import solve_mis_milp, GUROBI_AVAILABLE as MILP_GUROBI_AVAILABLE
+except ImportError:
+    MILP_GUROBI_AVAILABLE = False
+    solve_mis_milp = None
+
+try:
+    from ..solvers.scipy_milp import solve_mis_scipy, SCIPY_MILP_AVAILABLE
+except ImportError:
+    SCIPY_MILP_AVAILABLE = False
+    solve_mis_scipy = None
+
+MILP_AVAILABLE = MILP_GUROBI_AVAILABLE or SCIPY_MILP_AVAILABLE
+
 
 @dataclass
 class BenchmarkResult:
@@ -837,6 +851,134 @@ class NetworkXComparisonBenchmark:
                 error_message=str(e)
             )
 
+    def run_scipy_milp_solver(self, graph: nx.Graph) -> BenchmarkResult:
+        """Run SciPy MILP direct solver for Maximum Independent Set."""
+        graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+        
+        if not SCIPY_MILP_AVAILABLE:
+            return BenchmarkResult(
+                algorithm_name="SciPy-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message="SciPy MILP solver not available (upgrade SciPy to version 1.9.0+)"
+            )
+        
+        try:
+            start_time = time.time()
+            independent_set = self._run_with_timeout(
+                solve_mis_scipy,
+                self.medium_timeout,
+                graph,
+                True  # suppress_output
+            )
+            runtime = time.time() - start_time
+            
+            return BenchmarkResult(
+                algorithm_name="SciPy-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=list(independent_set),
+                set_size=len(independent_set),
+                runtime_seconds=runtime,
+                optimization_details={'solver_type': 'MILP', 'solver': 'SciPy'}
+            )
+            
+        except TimeoutError:
+            return BenchmarkResult(
+                algorithm_name="SciPy-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=self.medium_timeout,
+                success=False,
+                timeout=True,
+                error_message="Timeout exceeded"
+            )
+        except Exception as e:
+            return BenchmarkResult(
+                algorithm_name="SciPy-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message=str(e)
+            )
+
+    def run_gurobi_milp_solver(self, graph: nx.Graph) -> BenchmarkResult:
+        """Run Gurobi MILP direct solver for Maximum Independent Set."""
+        graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+        
+        if not MILP_AVAILABLE:
+            return BenchmarkResult(
+                algorithm_name="Gurobi-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message="Gurobi MILP solver not available (install gurobipy and ensure valid license)"
+            )
+        
+        try:
+            start_time = time.time()
+            independent_set = self._run_with_timeout(
+                solve_mis_milp,
+                self.medium_timeout,
+                graph,
+                True  # suppress_output
+            )
+            runtime = time.time() - start_time
+            
+            return BenchmarkResult(
+                algorithm_name="Gurobi-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=list(independent_set),
+                set_size=len(independent_set),
+                runtime_seconds=runtime,
+                optimization_details={'solver_type': 'MILP', 'solver': 'Gurobi'}
+            )
+            
+        except TimeoutError:
+            return BenchmarkResult(
+                algorithm_name="Gurobi-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=self.medium_timeout,
+                success=False,
+                timeout=True,
+                error_message="Timeout exceeded"
+            )
+        except Exception as e:
+            return BenchmarkResult(
+                algorithm_name="Gurobi-MILP",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message=str(e)
+            )
+
 
 def run_algorithm_comparison(
     graph: nx.Graph,
@@ -862,6 +1004,8 @@ def run_algorithm_comparison(
             - "dirac": Dirac-3 continuous cloud solver (if available)
             - "dirac_hybrid": Hybrid Dirac/NetworkX solver (auto-switches based on graph size)
             - "dirac_pgd_hybrid": Hybrid Dirac+PGD solver (global search + high-precision refinement)
+            - "gurobi_milp": Gurobi MILP direct solver (exact combinatorial optimization)
+            - "scipy_milp": SciPy MILP direct solver (exact combinatorial optimization)
         benchmark_config: Configuration dict for benchmark settings.
         
     Returns:
@@ -902,6 +1046,19 @@ def run_algorithm_comparison(
                 result = benchmark.run_dirac_hybrid_oracle(graph)
             elif alg == "dirac_pgd_hybrid" or alg == "dirac_pgd":
                 result = benchmark.run_dirac_pgd_hybrid_oracle(graph)
+            elif alg == "gurobi_milp":
+                result = benchmark.run_gurobi_milp_solver(graph)
+            elif alg == "scipy_milp":
+                result = benchmark.run_scipy_milp_solver(graph)
+            elif alg == "milp":
+                # Generic MILP - prefer Gurobi if available, otherwise SciPy
+                if MILP_GUROBI_AVAILABLE:
+                    result = benchmark.run_gurobi_milp_solver(graph)
+                elif SCIPY_MILP_AVAILABLE:
+                    result = benchmark.run_scipy_milp_solver(graph)
+                else:
+                    print(f"  ✗ {alg}: No MILP solver available")
+                    continue
             else:
                 print(f"Unknown algorithm: {alg}")
                 continue

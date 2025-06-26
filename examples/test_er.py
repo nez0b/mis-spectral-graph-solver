@@ -30,9 +30,9 @@ from motzkinstraus.benchmarks.networkx_comparison import (
 
 def create_test_graph():
     """Create a test graph with 30 nodes (< 35 threshold)."""
-    # Use a Barabasi-Albert graph for interesting structure
-    num_nodes = 105
-    G = nx.barabasi_albert_graph(num_nodes, 3, seed=41)
+    # Use a Erdos-Renyi graph for interesting structure
+    num_nodes = 80
+    G = nx.erdos_renyi_graph(num_nodes, 0.6, seed=41)
     
     print(f"Test Graph Properties:")
     print(f"  Nodes: {G.number_of_nodes()}")
@@ -58,7 +58,7 @@ def run_comprehensive_comparison(G):
         "gurobi_milp",      # Gurobi MILP direct solver (exact)
         "scipy_milp",       # SciPy MILP direct solver (exact, open-source)
         # "jax_pgd",          # JAX Projected Gradient Descent
-        # "dirac_hybrid",     # Hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)
+        "dirac_hybrid",     # Hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)
         # "dirac_pgd_hybrid", # NEW: Hybrid Dirac+PGD solver (global search + high-precision refinement)
         # "dirac",            # Pure Dirac-3 continuous cloud solver
         # "jax_md"            # JAX Mirror Descent
@@ -67,8 +67,6 @@ def run_comprehensive_comparison(G):
     
     print("✓ Using hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)")
     print("✓ Using NEW Dirac+PGD hybrid solver (global search + high-precision refinement)")
-    print("✓ Using Gurobi MILP direct solver (exact combinatorial optimization)")
-    print("✓ Using NEW SciPy MILP direct solver (exact, open-source alternative)")
     print("✓ Large graphs (>35 nodes) will use Dirac-3 cloud solver or hybrid approach")
     
     # Configure benchmark (adjusted for 10-node graph)
@@ -89,7 +87,7 @@ def run_comprehensive_comparison(G):
             'num_samples': 50,       # Conservative for API reliability
             'relax_schedule': 4,     # Default relaxation schedule as requested
             'solution_precision': None,  # Solution precision parameter
-            'threshold_nodes': 88    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
+            'threshold_nodes': 70    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
         },
         # Configuration for the new Dirac+PGD hybrid solver
         'dirac_pgd_config': {
@@ -224,7 +222,7 @@ def visualize_graph_and_solutions(G, results, optimal_size, output_dir):
     
     plt.suptitle(f'Independent Set Solutions Comparison\nGraph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges', fontsize=14)
     plt.tight_layout()
-    plt.savefig(output_dir / 'graph_solutions_comparison.png', dpi=300, bbox_inches='tight')
+    plt.savefig(output_dir / f'erdos_renyi_graph_solutions_{G.number_of_nodes()}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -338,7 +336,7 @@ def plot_algorithm_comparison(analysis_data, output_dir):
     plt.grid(True, alpha=0.3)
     plt.axhline(y=1.0, color='red', linestyle='--', alpha=0.7, label='Optimal')
     plt.legend()
-    plt.savefig(output_dir / 'quality_speed_tradeoff.png', dpi=300, bbox_inches='tight')
+    plt.savefig(output_dir / 'timing_erdos_renyi.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -352,7 +350,7 @@ def generate_summary_report(G, results, analysis_data, optimal_size, output_dir)
         f.write("MIS Algorithm Comparison Report\n")
         f.write("="*50 + "\n\n")
         
-        f.write(f"Test Graph: Barabasi-Albert (10 nodes, 3 attachments)\n")
+        f.write(f"Test Graph: Erdos-Renyi {G.number_of_nodes()} nodes, {G.number_of_edges()} edges\n")
         f.write(f"  Nodes: {G.number_of_nodes()}\n")
         f.write(f"  Edges: {G.number_of_edges()}\n")
         f.write(f"  Density: {G.number_of_edges() / (G.number_of_nodes() * (G.number_of_nodes() - 1) / 2):.3f}\n")
