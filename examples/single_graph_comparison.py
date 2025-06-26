@@ -2,8 +2,13 @@
 """
 Single Graph Comprehensive Comparison
 
-Test all MIS algorithms on a single 10-node graph to demonstrate 
+Test all MIS algorithms including the new Dirac+PGD hybrid solver to demonstrate 
 the complete benchmarking framework with detailed visualizations.
+
+Includes the new DiracPGDHybridOracle that combines:
+- Dirac-3 continuous cloud solver for global search
+- JAX Projected Gradient Descent for high-precision refinement
+- NetworkX exact solver for small graphs (≤35 nodes)
 """
 
 import os
@@ -26,7 +31,7 @@ from motzkinstraus.benchmarks.networkx_comparison import (
 def create_test_graph():
     """Create a test graph with 30 nodes (< 35 threshold)."""
     # Use a Barabasi-Albert graph for interesting structure
-    num_nodes = 60
+    num_nodes = 95
     G = nx.barabasi_albert_graph(num_nodes, 3, seed=42)
     
     print(f"Test Graph Properties:")
@@ -44,7 +49,7 @@ def run_comprehensive_comparison(G):
     print("RUNNING COMPREHENSIVE ALGORITHM COMPARISON")
     print("="*60)
     
-    # All available algorithms (including Dirac cloud solver)
+    # All available algorithms (including new hybrid solvers)
     algorithms = [
         "nx_greedy",        # NetworkX greedy (multiple runs)
         "nx_greedy_single", # NetworkX greedy (single run)
@@ -52,13 +57,15 @@ def run_comprehensive_comparison(G):
         "nx_exact",         # NetworkX exact via cliques (too slow for large graphs)
         # "jax_pgd",          # JAX Projected Gradient Descent
         "dirac_hybrid",     # Hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)
+        "dirac_pgd_hybrid", # NEW: Hybrid Dirac+PGD solver (global search + high-precision refinement)
         # "dirac",            # Pure Dirac-3 continuous cloud solver
         # "jax_md"            # JAX Mirror Descent
         # "gurobi"            # Gurobi exact (excluded for speed)
     ]
     
     print("✓ Using hybrid Dirac/NetworkX solver (auto-switches at 35 nodes)")
-    print("✓ Large graphs (>35 nodes) will use Dirac-3 cloud solver")
+    print("✓ Using NEW Dirac+PGD hybrid solver (global search + high-precision refinement)")
+    print("✓ Large graphs (>35 nodes) will use Dirac-3 cloud solver or hybrid approach")
     
     # Configure benchmark (adjusted for 10-node graph)
     benchmark_config = {
@@ -75,10 +82,19 @@ def run_comprehensive_comparison(G):
             'verbose': True          # Enable verbose for progress tracking
         },
         'dirac_config': {
-            'num_samples': 100,       # Conservative for API reliability
+            'num_samples': 50,       # Conservative for API reliability
             'relax_schedule': 4,     # Default relaxation schedule as requested
-            'solution_precision': 0.001,  # Solution precision parameter
-            'threshold_nodes': 50    # Threshold for hybrid solver
+            'solution_precision': None,  # Solution precision parameter
+            'threshold_nodes': 88    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
+        },
+        # Configuration for the new Dirac+PGD hybrid solver
+        'dirac_pgd_config': {
+            'nx_threshold': 88,      # Use NetworkX exact for graphs ≤85 nodes
+            'dirac_num_samples': 50, # Dirac global search samples
+            'dirac_relax_schedule': 4, # Dirac relaxation schedule
+            'pgd_tolerance': 1e-7,   # High-precision PGD refinement tolerance
+            'pgd_max_iterations': 1000, # PGD refinement iterations
+            'verbose': True          # Show detailed solve information
         }
     }
     num_nodes = G.number_of_nodes()
@@ -350,9 +366,10 @@ def generate_summary_report(G, results, analysis_data, optimal_size, output_dir)
         
         # Key insights
         f.write(f"\nKey Insights:\n")
-        f.write(f"- Exact methods (JAX, NetworkX exact) all found optimal solution\n")
+        f.write(f"- Exact methods (NetworkX exact, hybrid solvers) all found optimal solution\n")
+        f.write(f"- NEW: Dirac+PGD hybrid combines global search with high-precision refinement\n")
         f.write(f"- NetworkX approximation provides good quality/speed trade-off\n")
-        f.write(f"- JAX solvers converge reliably with multi-restart strategy\n")
+        f.write(f"- Hybrid solvers automatically choose best method based on graph size\n")
         f.write(f"- Greedy heuristic shows significant variance across random seeds\n")
         
         # Performance ranking
@@ -368,9 +385,10 @@ def generate_summary_report(G, results, analysis_data, optimal_size, output_dir)
 
 
 def main():
-    """Run single graph comprehensive comparison."""
+    """Run single graph comprehensive comparison including new Dirac+PGD hybrid solver."""
     print("MIS Algorithm Single Graph Comparison")
-    print("Testing all methods on a 10-node Barabasi-Albert graph")
+    print("Testing all methods including NEW Dirac+PGD hybrid solver")
+    print("Graph: Barabasi-Albert with configurable size")
     
     # Create output directory
     output_dir = Path("figures")

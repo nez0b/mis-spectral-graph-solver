@@ -40,6 +40,12 @@ try:
 except ImportError:
     DIRAC_HYBRID_AVAILABLE = False
 
+try:
+    from ..oracles.dirac_pgd_hybrid import DiracPGDHybridOracle
+    DIRAC_PGD_HYBRID_AVAILABLE = True
+except ImportError:
+    DIRAC_PGD_HYBRID_AVAILABLE = False
+
 
 @dataclass
 class BenchmarkResult:
@@ -707,6 +713,130 @@ class NetworkXComparisonBenchmark:
                 error_message=str(e)
             )
 
+    def run_dirac_pgd_hybrid_oracle(self, graph: nx.Graph) -> BenchmarkResult:
+        """Run Dirac/PGD hybrid solver that combines global search with high-precision refinement."""
+        graph_desc = f"Graph_n{graph.number_of_nodes()}_m{graph.number_of_edges()}"
+        
+        if not DIRAC_PGD_HYBRID_AVAILABLE:
+            return BenchmarkResult(
+                algorithm_name="Dirac-PGD-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message="Dirac PGD hybrid solver not available"
+            )
+        
+        try:
+            # Use configuration from benchmark_config if available
+            dirac_config = getattr(self, 'dirac_config', {})
+            jax_config = getattr(self, 'jax_config', {})
+            
+            # Configuration for the hybrid oracle
+            nx_threshold = dirac_config.get('threshold_nodes', 35)
+            dirac_num_samples = dirac_config.get('num_samples', 100)
+            dirac_relax_schedule = dirac_config.get('relax_schedule', 2)
+            pgd_tolerance = 1e-7  # High precision for refinement
+            
+            oracle = DiracPGDHybridOracle(
+                nx_threshold=nx_threshold,
+                dirac_num_samples=dirac_num_samples,
+                dirac_relax_schedule=dirac_relax_schedule,
+                pgd_tolerance=pgd_tolerance,
+                pgd_max_iterations=jax_config.get('max_iterations', 5000),
+                pgd_learning_rate=jax_config.get('learning_rate_pgd', 0.01),
+                verbose=getattr(self, 'verbose', False)
+            )
+            
+            # Enable verbose oracle calls if configured
+            oracle.verbose_oracle_calls = getattr(self, 'verbose', False)
+            
+            from ..algorithms import find_mis_with_oracle
+            
+            # Get solver info for logging
+            solver_info = oracle.get_solver_info(graph.number_of_nodes())
+            print(f"  Using {solver_info['solver']} for {graph.number_of_nodes()}-node graph")
+            
+            start_time = time.time()
+            
+            # Strategy: Use constructive solver if available, otherwise use search-to-decision
+            if hasattr(oracle, 'solve_mis'):
+                try:
+                    # Attempt direct constructive solving
+                    oracle.call_count = 0  # Reset counter
+                    independent_set = oracle.solve_mis(graph)
+                    oracle_calls = oracle.call_count
+                    print(f"    → Used direct constructive solver")
+                except NotImplementedError:
+                    # Fallback to search-to-decision
+                    print(f"    → Constructive method not available, using search-to-decision")
+                    independent_set, oracle_calls = self._run_with_timeout(
+                        find_mis_with_oracle,
+                        self.slow_timeout,
+                        graph,
+                        oracle
+                    )
+            else:
+                # Pure oracle - use search wrapper
+                print(f"    → Using search-to-decision wrapper")
+                independent_set, oracle_calls = self._run_with_timeout(
+                    find_mis_with_oracle,
+                    self.slow_timeout,
+                    graph,
+                    oracle
+                )
+            
+            runtime = time.time() - start_time
+            
+            # Get detailed solve information
+            solve_info = oracle.get_last_solve_info()
+            
+            return BenchmarkResult(
+                algorithm_name="Dirac-PGD-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=list(independent_set),
+                set_size=len(independent_set),
+                runtime_seconds=runtime,
+                oracle_calls=oracle_calls,
+                optimization_details={
+                    'solver_used': solver_info['solver'], 
+                    'nx_threshold': nx_threshold,
+                    'pgd_tolerance': pgd_tolerance,
+                    'solve_details': solve_info
+                }
+            )
+            
+        except TimeoutError:
+            return BenchmarkResult(
+                algorithm_name="Dirac-PGD-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=self.slow_timeout,
+                success=False,
+                timeout=True,
+                error_message="Timeout exceeded"
+            )
+        except Exception as e:
+            return BenchmarkResult(
+                algorithm_name="Dirac-PGD-Hybrid",
+                graph_description=graph_desc,
+                graph_size=graph.number_of_nodes(),
+                graph_edges=graph.number_of_edges(),
+                independent_set=[],
+                set_size=0,
+                runtime_seconds=0.0,
+                success=False,
+                error_message=str(e)
+            )
+
 
 def run_algorithm_comparison(
     graph: nx.Graph,
@@ -731,6 +861,7 @@ def run_algorithm_comparison(
             - "gurobi": Gurobi exact (if available)
             - "dirac": Dirac-3 continuous cloud solver (if available)
             - "dirac_hybrid": Hybrid Dirac/NetworkX solver (auto-switches based on graph size)
+            - "dirac_pgd_hybrid": Hybrid Dirac+PGD solver (global search + high-precision refinement)
         benchmark_config: Configuration dict for benchmark settings.
         
     Returns:
@@ -769,6 +900,8 @@ def run_algorithm_comparison(
                 result = benchmark.run_dirac_oracle(graph)
             elif alg == "dirac_hybrid":
                 result = benchmark.run_dirac_hybrid_oracle(graph)
+            elif alg == "dirac_pgd_hybrid" or alg == "dirac_pgd":
+                result = benchmark.run_dirac_pgd_hybrid_oracle(graph)
             else:
                 print(f"Unknown algorithm: {alg}")
                 continue

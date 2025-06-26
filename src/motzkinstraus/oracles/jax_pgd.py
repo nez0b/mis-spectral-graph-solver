@@ -114,12 +114,14 @@ class ProjectedGradientDescentOracle(Oracle):
         # For non-trivial cases, use the parent implementation (which handles call counting)
         return super().get_omega(graph)
     
-    def solve_quadratic_program(self, adjacency_matrix: np.ndarray) -> float:
+    def solve_quadratic_program(self, adjacency_matrix: np.ndarray, x0: Optional[np.ndarray] = None) -> float:
         """
         Solve the Motzkin-Straus quadratic program using Projected Gradient Descent.
         
         Args:
             adjacency_matrix: The adjacency matrix of the graph.
+            x0: Optional initial point. If provided, runs single-start refinement mode.
+                If None, runs multi-restart discovery mode.
             
         Returns:
             The optimal value of the quadratic program.
@@ -155,20 +157,52 @@ class ProjectedGradientDescentOracle(Oracle):
                 self.last_best_restart_idx = 0
                 return 0.0
             
-            # Run multi-restart optimization
-            best_x, best_energy, all_histories, all_final_energies = run_multi_restart_optimization(
-                poly_indices=poly_indices,
-                poly_coefficients=poly_coefficients,
-                num_vars=n,
-                config=self.config,
-                algorithm="pgd",
-                seed=42  # Fixed seed for reproducibility
-            )
-            
-            # Store results for debugging
-            self.last_histories = all_histories
-            self.last_final_energies = all_final_energies
-            self.last_best_restart_idx = all_final_energies.index(max(all_final_energies))
+            if x0 is not None:
+                # Single-start refinement mode
+                if self.config.verbose:
+                    print(f"PGD Oracle: Running single-start refinement from provided x0")
+                
+                # Convert x0 to JAX array
+                x0_jax = jnp.array(x0, dtype=jnp.float32)
+                
+                # Import the function locally to avoid import issues
+                from ..jax_optimizers import run_projected_gradient_descent
+                
+                # Run single PGD optimization from x0
+                best_x, energy_history = run_projected_gradient_descent(
+                    poly_indices=poly_indices,
+                    poly_coefficients=poly_coefficients,
+                    num_vars=n,
+                    config=self.config,
+                    x_init=x0_jax,
+                    seed=42
+                )
+                
+                best_energy = float(energy_history[-1])
+                
+                # Store results for debugging (single run)
+                self.last_histories = [energy_history]
+                self.last_final_energies = [best_energy]
+                self.last_best_restart_idx = 0
+                
+            else:
+                # Multi-restart discovery mode
+                if self.config.verbose:
+                    print(f"PGD Oracle: Running multi-restart discovery mode")
+                
+                best_x, best_energy, all_histories, all_final_energies = run_multi_restart_optimization(
+                    poly_indices=poly_indices,
+                    poly_coefficients=poly_coefficients,
+                    num_vars=n,
+                    config=self.config,
+                    algorithm="pgd",
+                    seed=42  # Fixed seed for reproducibility
+                )
+                
+                # Store results for debugging
+                self.last_histories = all_histories
+                self.last_final_energies = all_final_energies
+                self.last_best_restart_idx = all_final_energies.index(max(all_final_energies))
             
             if self.config.verbose:
                 print(f"PGD Oracle: Best energy = {best_energy:.6f} from restart {self.last_best_restart_idx}")

@@ -62,9 +62,9 @@ class DiracOracle(Oracle):
     def is_available(self) -> bool:
         return DIRAC_AVAILABLE
     
-    def solve_quadratic_program(self, adjacency_matrix: np.ndarray) -> float:
+    def _solve_and_get_vector(self, adjacency_matrix: np.ndarray) -> tuple[float, np.ndarray]:
         """
-        Solve the Motzkin-Straus quadratic program using Dirac-3 continuous solver.
+        Solve the Motzkin-Straus quadratic program and return both objective value and solution vector.
         
         The quadratic program is:
         max(0.5 * x.T * A * x) subject to sum(x_i) = 1, x_i >= 0
@@ -76,7 +76,7 @@ class DiracOracle(Oracle):
             adjacency_matrix: The adjacency matrix of the graph.
             
         Returns:
-            The optimal value of the quadratic program.
+            Tuple of (optimal_value, solution_vector).
             
         Raises:
             OracleError: If the Dirac solver fails.
@@ -84,7 +84,7 @@ class DiracOracle(Oracle):
         n = adjacency_matrix.shape[0]
         
         if n == 0:
-            return 0.0
+            return 0.0, np.array([])
         
         try:
             # For the Dirac model, we need to convert our objective:
@@ -133,7 +133,7 @@ class DiracOracle(Oracle):
                     objective_value = 0.5 * (best_solution.T @ adjacency_matrix @ best_solution)
                     
                     print(f"Dirac solver returned solution with objective value: {objective_value}")
-                    return float(objective_value)
+                    return float(objective_value), best_solution
                 else:
                     raise OracleError("Dirac solver returned empty solutions list")
             else:
@@ -144,3 +144,19 @@ class DiracOracle(Oracle):
                 raise
             else:
                 raise OracleError(f"Error in Dirac solver: {str(e)}")
+
+    def solve_quadratic_program(self, adjacency_matrix: np.ndarray) -> float:
+        """
+        Solve the Motzkin-Straus quadratic program using Dirac-3 continuous solver.
+        
+        Args:
+            adjacency_matrix: The adjacency matrix of the graph.
+            
+        Returns:
+            The optimal value of the quadratic program.
+            
+        Raises:
+            OracleError: If the Dirac solver fails.
+        """
+        objective_value, _ = self._solve_and_get_vector(adjacency_matrix)
+        return objective_value
