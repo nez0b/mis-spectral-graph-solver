@@ -17,6 +17,7 @@ from .algorithms import (
     verify_independent_set,
     verify_clique
 )
+from .io import read_dimacs_graph
 from .oracles import get_available_oracles
 
 # Import Gurobi MILP solvers with graceful handling of missing dependencies
@@ -73,6 +74,8 @@ else:
 
 __version__ = "0.2.0"
 __all__ = [
+    # IO functions
+    "read_dimacs_graph",
     # Oracle-based algorithms
     "find_mis_with_oracle", 
     "find_mis_brute_force",

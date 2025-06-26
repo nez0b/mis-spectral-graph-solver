@@ -190,7 +190,8 @@ def find_max_clique_with_oracle(graph: nx.Graph, oracle: Oracle, verbose: bool =
             # Commit to this node
             clique_nodes.add(v)
             # Reduce the problem: the rest of the clique must be in the neighborhood of v
-            G_current = G_current.subgraph(neighbors_of_v)
+            # Create an unfrozen copy of the subgraph
+            G_current = nx.Graph(G_current.subgraph(neighbors_of_v))
             k_target -= 1
             
             if k_target == 0:
