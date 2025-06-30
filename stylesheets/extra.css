@@ -1,0 +1,215 @@
+/* Custom styles for Motzkin-Straus MIS Solver documentation */
+
+/* Mathematical content styling */
+.katex {
+  font-size: 1.1em !important;
+}
+
+.katex-display {
+  margin: 1.5em 0 !important;
+  padding: 1em;
+  background-color: var(--md-code-bg-color);
+  border-radius: 0.3rem;
+  border-left: 4px solid var(--md-primary-fg-color);
+}
+
+/* Dark theme adjustments for math */
+[data-md-color-scheme="slate"] .katex-display {
+  background-color: var(--md-code-bg-color);
+}
+
+/* Enhanced code blocks */
+.highlight pre {
+  border-radius: 0.3rem;
+  border-left: 4px solid var(--md-accent-fg-color);
+}
+
+/* Algorithm boxes */
+.algorithm {
+  background-color: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.3rem;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.algorithm-title {
+  font-weight: bold;
+  color: var(--md-primary-fg-color);
+  margin-bottom: 0.5rem;
+}
+
+/* Performance comparison tables */
+.comparison-table {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.comparison-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.comparison-table th {
+  background-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.comparison-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lighter);
+}
+
+/* Complexity badges */
+.complexity {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-family: var(--md-code-font);
+  font-size: 0.85em;
+  font-weight: bold;
+}
+
+.complexity.polynomial {
+  background-color: #4caf50;
+  color: white;
+}
+
+.complexity.exponential {
+  background-color: #f44336;
+  color: white;
+}
+
+.complexity.quadratic {
+  background-color: #ff9800;
+  color: white;
+}
+
+/* Oracle method cards */
+.oracle-card {
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  background-color: var(--md-default-bg-color);
+}
+
+.oracle-card h4 {
+  margin-top: 0;
+  color: var(--md-primary-fg-color);
+}
+
+/* Parameter documentation */
+.parameter {
+  background-color: var(--md-code-bg-color);
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  border-radius: 0.3rem;
+  border-left: 3px solid var(--md-accent-fg-color);
+}
+
+.parameter-name {
+  font-family: var(--md-code-font);
+  font-weight: bold;
+  color: var(--md-accent-fg-color);
+}
+
+.parameter-type {
+  font-family: var(--md-code-font);
+  font-size: 0.9em;
+  color: var(--md-default-fg-color--light);
+}
+
+.parameter-range {
+  font-family: var(--md-code-font);
+  background-color: var(--md-default-fg-color--lightest);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  margin: 0.2rem 0;
+}
+
+/* Quantum computing specific styling */
+.quantum-note {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196f3;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0.3rem;
+}
+
+[data-md-color-scheme="slate"] .quantum-note {
+  background-color: rgba(33, 150, 243, 0.1);
+  border-left-color: #2196f3;
+}
+
+/* Performance benchmark styling */
+.benchmark-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  background-color: var(--md-code-bg-color);
+  border-radius: 0.3rem;
+}
+
+.benchmark-name {
+  font-weight: bold;
+}
+
+.benchmark-time {
+  font-family: var(--md-code-font);
+  color: var(--md-accent-fg-color);
+}
+
+.benchmark-quality {
+  font-family: var(--md-code-font);
+  color: var(--md-primary-fg-color);
+}
+
+/* Mathematical theorem boxes */
+.theorem {
+  background-color: var(--md-default-bg-color);
+  border: 2px solid var(--md-primary-fg-color);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 2rem 0;
+}
+
+.theorem-title {
+  font-weight: bold;
+  font-size: 1.1em;
+  color: var(--md-primary-fg-color);
+  margin-bottom: 1rem;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 76.1875em) {
+  .katex-display {
+    margin: 1em 0 !important;
+    padding: 0.75em;
+  }
+  
+  .oracle-card {
+    padding: 0.75rem;
+  }
+  
+  .comparison-table {
+    font-size: 0.9em;
+  }
+}
+
+/* Print styles */
+@media print {
+  .katex-display {
+    background-color: transparent !important;
+    border: 1px solid #ccc !important;
+  }
+  
+  .oracle-card {
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+  }
+}
