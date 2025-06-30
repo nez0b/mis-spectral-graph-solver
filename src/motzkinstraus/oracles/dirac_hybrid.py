@@ -4,6 +4,7 @@ Hybrid Dirac/NetworkX exact solver that automatically chooses the best approach 
 
 import numpy as np
 import networkx as nx
+from typing import Optional
 from .base import Oracle
 from ..exceptions import OracleError, SolverUnavailableError
 
@@ -22,16 +23,24 @@ class DiracNetworkXHybridOracle(Oracle):
         num_samples: Number of samples for Dirac solver (default: 10).
         relax_schedule: Relaxation schedule for Dirac solver (default: 2).
         solution_precision: Solution precision for Dirac solver (default: 0.001).
+        sum_constraint: Constraint for solution variables sum (default: 1).
+        mean_photon_number: Optional mean photon number override (default: None).
+        quantum_fluctuation_coefficient: Optional quantum fluctuation coefficient override (default: None).
     """
     
     def __init__(self, threshold_nodes: int = 35, num_samples: int = 10, 
-                 relax_schedule: int = 2, solution_precision: float = 0.001):
+                 relax_schedule: int = 2, solution_precision: float = 0.001,
+                 sum_constraint: int = 1, mean_photon_number: Optional[float] = None,
+                 quantum_fluctuation_coefficient: Optional[int] = None):
         super().__init__()
         
         self.threshold_nodes = threshold_nodes
         self.num_samples = num_samples
         self.relax_schedule = relax_schedule
         self.solution_precision = solution_precision
+        self.sum_constraint = sum_constraint
+        self.mean_photon_number = mean_photon_number
+        self.quantum_fluctuation_coefficient = quantum_fluctuation_coefficient
         
         # Import and check availability of Dirac solver
         try:
@@ -130,7 +139,10 @@ class DiracNetworkXHybridOracle(Oracle):
             dirac_oracle = self.DiracOracle(
                 num_samples=self.num_samples,
                 relax_schedule=self.relax_schedule,
-                solution_precision=self.solution_precision
+                solution_precision=self.solution_precision,
+                sum_constraint=self.sum_constraint,
+                mean_photon_number=self.mean_photon_number,
+                quantum_fluctuation_coefficient=self.quantum_fluctuation_coefficient
             )
             
             # Use Dirac solver
@@ -215,6 +227,9 @@ class DiracNetworkXHybridOracle(Oracle):
                 'parameters': {
                     'num_samples': self.num_samples,
                     'relax_schedule': self.relax_schedule,
-                    'solution_precision': self.solution_precision
+                    'solution_precision': self.solution_precision,
+                    'sum_constraint': self.sum_constraint,
+                    'mean_photon_number': self.mean_photon_number,
+                    'quantum_fluctuation_coefficient': self.quantum_fluctuation_coefficient
                 }
             }

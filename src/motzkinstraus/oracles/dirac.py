@@ -1,8 +1,23 @@
 """
 Dirac-3 continuous cloud solver for the Motzkin-Straus quadratic program.
+
+Dirac-3 API Parameters:
+
+ - `num_samples`: The optional number of samples to run for the stochastic solver. The value must be between 1 and 100, with default 1.
+- `relaxation_schedule`: A configuration selector that must be in the set {1,2,3,4}, representing four different schedules. The relaxation schedule controls multiple parameters of the quantum machine including the amount of loss, number of feedback loops, the amount of quantum fluctuation, and mean photon number measured. While the first two parameters are fixed, the last two can be further adjusted by users (see below). Lower relaxation schedules are set to larger amount of dissipation in a open quantum system setup, leading to more iterations needed to reach stable states. As a result, the probability of finding an optimal solution can be higher in higher schedules, especially on a competitive energy landscape with the trade-off of longer evolution time. This parameter is optional with a default of 1.
+    
+    {1,2,3,4}
+    
+- `sum_constraint`: A constraint applied to the problem space such that the solution variables must sum to the provided value. Optional value that must be between 1 and 10000, with default 1.
+- `solution_precision`: An optional number that specifies the level of precision to apply to the solutions. Omit this when the highest precision continuous solutions are deisired. If specified, then a distillation method is applied to the continuous solutions to reduce them to the submitted `solution_precision`. Note that `sum_constraint` must be divisible by `solution_precision` when the latter is specified.
+- `mean_photon_number`: An optional advanced configuration parameter that is normally set automatically through the choice of `relaxation_schedule`. A value specified here overrides the default value and should be a real-number value from from 0.0000667 to 0.0066666. This parameter is the average number of photons detected over a specific time period which is a time-bin representing a possible value of a variable in Dirac-3. This is a common metric used in photon statistics and quantum optics to approximate the probability of being in the single-photon regime of coherent light. Low mean photon number maintains the quantum superposition effect in high-dimensional time-bin modes of the wavefunction. Notice that extremely low mean photon number to the same order of thermal or electronic noise in single photon detector might affect the solution negatively. [Fox, M. (2006). *Quantum Optics*. Wiley, 75-104., [Pearson, D., Elliott, C. (2004). On the Optimal Mean Photon Number for Quantum Cryptography.](https://arxiv.org/abs/quant-ph/0403065v2), [Mower, J., Zhang, Z., Desjardins, P., Lee, C., Shapiro, J. H., Englund, D. (2013). High-dimensional quantum key distribution using dispersive optics. Phys. Rev. A, 87(6), 062322.](https://link.aps.org/doi/10.1103/PhysRevA.87.062322), [Nguyen, L., Rehain, P., Sua, Y. M., Huang, Y. (2018). Programmable quantum random number generator without postprocessing. Opt. Lett., 43(4), 631-634.](https://opg.optica.org/ol/abstract.cfm?URI=ol-43-4-631)]
+- `quantum_fluctuation_coefficient`: An optional advanced configuration parameter that is normally set automatically through the choice of `relaxation_schedule`. A value specified here overrides the default value and should be an integer value *n*∈{1,2,…,100}, which is used to compute the coefficient *n*1 in the real-valued interval [1001,1]. The inherent randomness of photon arrival time comes from the quantum nature of light giving rise to a fundamental limitation in single photon counting, known as Poisson noise. Dirac-3 takes advantage of this noise arising from quantum fluctuation to gain opportunity to large search space and jump out of local minima. This parameter can be adjusted to allow high or low amount of quantum fluctuation into the open system. A low fluctuation tends to provide a worse solution than a high fluctuation. Notice that, to maintain a good returned solution, this parameter should not reach too high in the same order as the signal photon. [[Bédard, G. (1967). Analysis of Light Fluctuations from Photon Counting Statistics, J. Opt. Soc. Am., 57, 1201-1206.](https://doi.org/10.1364/JOSA.57.001201)]
+    
+    n∈{1,2,…,100}
 """
 
 import numpy as np
+from typing import Optional
 from .base import Oracle
 from ..exceptions import OracleError, SolverUnavailableError
 
@@ -29,9 +44,14 @@ class DiracOracle(Oracle):
         num_samples: Number of solution samples to request (default: 100).
         relax_schedule: Solver relaxation schedule parameter (default: 2).
         solution_precision: Solution precision parameter (default: 0.001).
+        sum_constraint: Constraint for solution variables sum (default: 1).
+        mean_photon_number: Optional mean photon number override (default: None).
+        quantum_fluctuation_coefficient: Optional quantum fluctuation coefficient override (default: None).
     """
     
-    def __init__(self, num_samples: int = 100, relax_schedule: int = 2, solution_precision: float = 0.001):
+    def __init__(self, num_samples: int = 100, relax_schedule: int = 2, solution_precision: float = 0.001,
+                 sum_constraint: int = 1, mean_photon_number: Optional[float] = None, 
+                 quantum_fluctuation_coefficient: Optional[int] = None):
         super().__init__()
         if not self.is_available:
             raise SolverUnavailableError(
@@ -42,6 +62,9 @@ class DiracOracle(Oracle):
         self.num_samples = num_samples
         self.relax_schedule = relax_schedule
         self.solution_precision = solution_precision
+        self.sum_constraint = sum_constraint
+        self.mean_photon_number = mean_photon_number
+        self.quantum_fluctuation_coefficient = quantum_fluctuation_coefficient
         
         # Test connection
         try:
@@ -111,16 +134,32 @@ class DiracOracle(Oracle):
             solver = Dirac3ContinuousCloudSolver()
             
             print(f"Submitting {n}-variable quadratic program to Dirac-3 continuous solver...")
-            print(f"Parameters: num_samples={self.num_samples}, relaxation_schedule={self.relax_schedule}, solution_precision={self.solution_precision}")
+            params = [f"num_samples={self.num_samples}", f"relaxation_schedule={self.relax_schedule}"]
+            if self.solution_precision is not None:
+                params.append(f"solution_precision={self.solution_precision}")
+            params.append(f"sum_constraint={self.sum_constraint}")
+            if self.mean_photon_number is not None:
+                params.append(f"mean_photon_number={self.mean_photon_number}")
+            if self.quantum_fluctuation_coefficient is not None:
+                params.append(f"quantum_fluctuation_coefficient={self.quantum_fluctuation_coefficient}")
+            print(f"Parameters: {', '.join(params)}")
             
-            # Solve with simplex constraint (sum_constraint=1)
-            response = solver.solve(
-                model,
-                sum_constraint=1,  # Enforce simplex constraint: sum(x_i) = 1
-                num_samples=self.num_samples,
-                relaxation_schedule=self.relax_schedule,  # Correct parameter name
-                solution_precision=self.solution_precision
-            )
+            # Solve with configured parameters
+            solve_params = {
+                'sum_constraint': self.sum_constraint,
+                'num_samples': self.num_samples,
+                'relaxation_schedule': self.relax_schedule
+            }
+            
+            # Add optional parameters if specified
+            if self.solution_precision is not None:
+                solve_params['solution_precision'] = self.solution_precision
+            if self.mean_photon_number is not None:
+                solve_params['mean_photon_number'] = self.mean_photon_number
+            if self.quantum_fluctuation_coefficient is not None:
+                solve_params['quantum_fluctuation_coefficient'] = self.quantum_fluctuation_coefficient
+            
+            response = solver.solve(model, **solve_params)
             
             # Process the response
             if response and "results" in response and "solutions" in response["results"]:

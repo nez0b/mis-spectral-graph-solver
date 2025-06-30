@@ -11,15 +11,19 @@ dependencies = [
     "gurobipy>=12.0.2",
     "qci-client>=4.5.0",
     "eqc-models>=0.12.0",
-    "jax>=0.5.3",
-    "jaxlib>=0.5.3",
     "seaborn>=0.13.2",
+    "pandas>=2.3.0",
+    "scipy>=1.15.3",
+    "jax[metal]>=0.5.3",
 ]
 
 [project.optional-dependencies]
 gurobi = ["gurobipy>=11.0.0"]
 dirac = ["qci-client", "eqc-models"]
-all = ["gurobipy>=11.0.0", "qci-client", "eqc-models"]
+jax = ["jax>=0.4.0", "jaxlib>=0.4.0"]
+jax-cpu = ["jax[cpu]>=0.4.0"]
+jax-gpu = ["jax[cuda]>=0.4.0"]
+all = ["gurobipy>=11.0.0", "qci-client", "eqc-models", "jax>=0.4.0", "jaxlib>=0.4.0"]
 
 [build-system]
 requires = ["setuptools>=45", "wheel"]
@@ -30,3 +34,15 @@ where = ["src"]
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocs-jupyter>=0.24.0",
+    "pymdown-extensions>=10.0.0",
+    "mkdocs-git-revision-date-localized-plugin>=1.2.0",
+]

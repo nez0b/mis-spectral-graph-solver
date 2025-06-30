@@ -40,6 +40,9 @@ class DiracPGDHybridOracle(Oracle):
         dirac_num_samples: Number of samples for Dirac solver (default: 100).
         dirac_relax_schedule: Relaxation schedule for Dirac solver (default: 2).
         dirac_solution_precision: Solution precision for Dirac solver (default: 0.001).
+        dirac_sum_constraint: Constraint for solution variables sum in Dirac solver (default: 1).
+        dirac_mean_photon_number: Optional mean photon number override for Dirac solver (default: None).
+        dirac_quantum_fluctuation_coefficient: Optional quantum fluctuation coefficient override for Dirac solver (default: None).
         pgd_tolerance: High-precision tolerance for PGD refinement (default: 1e-7).
         pgd_max_iterations: Maximum iterations for PGD refinement (default: 5000).
         pgd_learning_rate: Learning rate for PGD refinement (default: 0.01).
@@ -53,6 +56,9 @@ class DiracPGDHybridOracle(Oracle):
         dirac_num_samples: int = 100,
         dirac_relax_schedule: int = 2,
         dirac_solution_precision: float = 0.001,
+        dirac_sum_constraint: int = 1,
+        dirac_mean_photon_number: Optional[float] = None,
+        dirac_quantum_fluctuation_coefficient: Optional[int] = None,
         pgd_tolerance: float = 1e-7,
         pgd_max_iterations: int = 5000,
         pgd_learning_rate: float = 0.01,
@@ -77,7 +83,10 @@ class DiracPGDHybridOracle(Oracle):
                 self.dirac_oracle = DiracOracle(
                     num_samples=dirac_num_samples,
                     relax_schedule=dirac_relax_schedule,
-                    solution_precision=dirac_solution_precision
+                    solution_precision=dirac_solution_precision,
+                    sum_constraint=dirac_sum_constraint,
+                    mean_photon_number=dirac_mean_photon_number,
+                    quantum_fluctuation_coefficient=dirac_quantum_fluctuation_coefficient
                 )
             except Exception as e:
                 if self.verbose:

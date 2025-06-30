@@ -25,14 +25,53 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Import DIMACS reader
-from demo_dimacs_clique_solvers import read_dimacs_graph
 
 from motzkinstraus.benchmarks.networkx_comparison import (
     NetworkXComparisonBenchmark, 
     run_algorithm_comparison
 )
 
+def read_dimacs_graph(filename):
+    """
+    Read a graph from DIMACS format file.
+    
+    DIMACS format:
+    - Lines starting with 'c' are comments
+    - Line starting with 'p edge n m' defines problem with n nodes and m edges
+    - Lines starting with 'e u v' define edges between nodes u and v
+    
+    Args:
+        filename (str): Path to DIMACS format file
+        
+    Returns:
+        nx.Graph: NetworkX graph representation
+    """
+    graph = nx.Graph()
+    
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.startswith('c'):
+                # Comment line, skip
+                continue
+            elif line.startswith('p edge'):
+                # Problem definition: p edge <num_nodes> <num_edges>
+                parts = line.split()
+                if len(parts) >= 3:
+                    num_nodes = int(parts[2])
+                    # Add nodes 1 through num_nodes (DIMACS uses 1-based indexing)
+                    graph.add_nodes_from(range(1, num_nodes + 1))
+            elif line.startswith('e'):
+                # Edge definition: e <node1> <node2>
+                parts = line.split()
+                if len(parts) >= 3:
+                    u, v = int(parts[1]), int(parts[2])
+                    graph.add_edge(u, v)
+    
+    return graph
 
 def load_dimacs_complement_graph(graph_name):
     
@@ -108,15 +147,22 @@ def run_comprehensive_comparison(G):
         },
         'dirac_config': {
             'num_samples': 50,       # Conservative for API reliability
-            'relax_schedule': 4,     # Default relaxation schedule as requested
+            'relax_schedule': 3,     # Default relaxation schedule as requested
             'solution_precision': None,  # Solution precision parameter
-            'threshold_nodes': 90    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
+            'sum_constraint': 1,     # Simplex constraint (default)
+            'mean_photon_number': 0.005,  # Example: Override default photon number
+            'quantum_fluctuation_coefficient': 3,  # Example: Override default fluctuation
+            'threshold_nodes': 5    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
         },
         # Configuration for the new Dirac+PGD hybrid solver
         'dirac_pgd_config': {
             'nx_threshold': 88,      # Use NetworkX exact for graphs ≤85 nodes
             'dirac_num_samples': 50, # Dirac global search samples
             'dirac_relax_schedule': 4, # Dirac relaxation schedule
+            'dirac_solution_precision': None,  # Use default solution precision
+            'dirac_sum_constraint': 1,  # Simplex constraint for Dirac solver
+            'dirac_mean_photon_number': 0.0035,  # Example: Override default photon number
+            'dirac_quantum_fluctuation_coefficient': 90,  # Example: Override default fluctuation
             'pgd_tolerance': 1e-7,   # High-precision PGD refinement tolerance
             'pgd_max_iterations': 1000, # PGD refinement iterations
             'verbose': True          # Show detailed solve information
@@ -452,6 +498,7 @@ def main(graph_name):
 
 
 if __name__ == "__main__":
-    graph_name = "gen200_p0.9_44"
+    # graph_name = "gen200_p0.9_44"
     # graph_name = "C250.9"
+    graph_name = "cycle_12"
     main(graph_name)

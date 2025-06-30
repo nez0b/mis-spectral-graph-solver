@@ -102,11 +102,11 @@ OMEGA_SOLVERS = [
     "jax_pgd",           # JAX Projected Gradient Descent Oracle
     # "jax_mirror",        # JAX Mirror Descent Oracle  
     # "gurobi_oracle",     # Gurobi Oracle (Motzkin-Straus)
-    "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
+    # "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
     "scipy_milp",        # SciPy MILP (Direct combinatorial)
-    "networkx_exact",    # NetworkX exact (small graphs only)
+    # "networkx_exact",    # NetworkX exact (small graphs only)
     "dirac_oracle",      # Dirac Oracle
-    "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
+    # "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
 ]
 
 # Solver configuration parameters
@@ -130,14 +130,17 @@ OMEGA_CONFIG = {
     
     # NetworkX configuration
     'networkx_config': {
-        'max_nodes': 20                   # Size limit for NetworkX exact solver
+        'max_nodes': 150                   # Size limit for NetworkX exact solver
     },
     
     # Dirac configuration
     'dirac_config': {
-        'num_samples': 30,                # Number of quantum annealing samples
-        'relax_schedule': 2,              # Relaxation schedule parameter
-        'solution_precision': None       # Solution precision
+        'num_samples': 50,                # Number of quantum annealing samples
+        'relax_schedule': 3,              # Relaxation schedule parameter
+        'solution_precision': None,       # Solution precision
+        'sum_constraint': 1,              # Simplex constraint (default)
+        'mean_photon_number': 0.0015,     # Example: Override default photon number
+        'quantum_fluctuation_coefficient': 3  # Example: Override default fluctuation
     },
     
     # Dirac-PGD Hybrid configuration
@@ -146,6 +149,9 @@ OMEGA_CONFIG = {
         'dirac_num_samples': 50,          # Number of Dirac samples for initialization
         'dirac_relax_schedule': 3,        # Dirac relaxation schedule
         'dirac_solution_precision': 0.001,  # Dirac solution precision
+        'dirac_sum_constraint': 1,        # Simplex constraint for Dirac solver
+        'dirac_mean_photon_number': 0.003,  # Example: Override default photon number
+        'dirac_quantum_fluctuation_coefficient': 40,  # Example: Override default fluctuation
         'pgd_tolerance': 1e-8,            # High-precision PGD tolerance
         'pgd_max_iterations': 3000,       # Maximum PGD refinement iterations
         'pgd_learning_rate': 0.015,       # PGD learning rate
@@ -358,7 +364,10 @@ class DiracOracleOmegaSolver(OmegaSolver):
                 self.oracle = DiracOracle(
                     num_samples=config['num_samples'],
                     relax_schedule=config['relax_schedule'],
-                    solution_precision=config['solution_precision']
+                    solution_precision=config['solution_precision'],
+                    sum_constraint=config['sum_constraint'],
+                    mean_photon_number=config['mean_photon_number'],
+                    quantum_fluctuation_coefficient=config['quantum_fluctuation_coefficient']
                 )
             except Exception:
                 self.oracle = None
@@ -394,6 +403,9 @@ class DiracPGDHybridOmegaSolver(OmegaSolver):
                     dirac_num_samples=config['dirac_num_samples'],
                     dirac_relax_schedule=config['dirac_relax_schedule'],
                     dirac_solution_precision=config['dirac_solution_precision'],
+                    dirac_sum_constraint=config['dirac_sum_constraint'],
+                    dirac_mean_photon_number=config['dirac_mean_photon_number'],
+                    dirac_quantum_fluctuation_coefficient=config['dirac_quantum_fluctuation_coefficient'],
                     pgd_tolerance=config['pgd_tolerance'],
                     pgd_max_iterations=config['pgd_max_iterations'],
                     pgd_learning_rate=config['pgd_learning_rate'],

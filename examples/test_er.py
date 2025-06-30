@@ -87,6 +87,9 @@ def run_comprehensive_comparison(G):
             'num_samples': 50,       # Conservative for API reliability
             'relax_schedule': 4,     # Default relaxation schedule as requested
             'solution_precision': None,  # Solution precision parameter
+            'sum_constraint': 1,     # Simplex constraint (default)
+            'mean_photon_number': 0.0025,  # Example: Override default photon number
+            'quantum_fluctuation_coefficient': 60,  # Example: Override default fluctuation
             'threshold_nodes': 70    # Threshold for hybrid solver (both dirac_hybrid and dirac_pgd_hybrid)
         },
         # Configuration for the new Dirac+PGD hybrid solver
@@ -94,6 +97,10 @@ def run_comprehensive_comparison(G):
             'nx_threshold': 88,      # Use NetworkX exact for graphs ≤85 nodes
             'dirac_num_samples': 50, # Dirac global search samples
             'dirac_relax_schedule': 4, # Dirac relaxation schedule
+            'dirac_solution_precision': None,  # Use default solution precision
+            'dirac_sum_constraint': 1,  # Simplex constraint for Dirac solver
+            'dirac_mean_photon_number': 0.004,  # Example: Override default photon number
+            'dirac_quantum_fluctuation_coefficient': 85,  # Example: Override default fluctuation
             'pgd_tolerance': 1e-7,   # High-precision PGD refinement tolerance
             'pgd_max_iterations': 1000, # PGD refinement iterations
             'verbose': True          # Show detailed solve information

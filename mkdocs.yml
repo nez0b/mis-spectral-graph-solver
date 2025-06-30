@@ -1,0 +1,153 @@
+site_name: Motzkin-Straus MIS Solver
+site_description: Maximum Independent Set solver using the Motzkin-Straus theorem and quantum computing
+site_author: MIS Research Team
+site_url: https://motzkinstraus.github.io
+
+repo_name: Motzkin-Straus MIS Solver
+repo_url: https://github.com/your-org/MotzkinStraus
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.select
+    - content.tabs.link
+    - toc.follow
+    - toc.integrate
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    logo: material/graph
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang: en
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      fallback_to_build_date: true
+  - mkdocs-jupyter:
+      execute: false
+      allow_errors: false
+
+markdown_extensions:
+  # Math support
+  - pymdownx.arithmatex:
+      generic: true
+  # Code highlighting
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Content enhancements
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  # Navigation
+  - toc:
+      permalink: true
+      title: On this page
+  # Formatting
+  - attr_list
+  - md_in_html
+  - footnotes
+  - def_list
+  - abbr
+  # Lists
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_javascript:
+  - javascripts/katex.js
+  - https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/katex.min.js
+  - https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/contrib/auto-render.min.js
+
+extra_css:
+  - https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.7/katex.min.css
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/MotzkinStraus
+    - icon: fontawesome/solid/book
+      link: https://motzkinstraus.github.io
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX  # Replace with actual Google Analytics ID
+
+nav:
+  - Home: index.md
+  - Theory:
+    - Motzkin-Straus Theorem: theory/motzkin-straus.md
+    - Algorithms Overview: theory/algorithms.md
+    - Complexity Analysis: theory/complexity.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Examples: getting-started/examples.md
+  - API Reference:
+    - Oracles:
+      - Overview: api/oracles/overview.md
+      - QP Solvers: api/oracles/qp-solvers.md
+      - Dirac-3 Oracle: api/oracles/dirac.md
+      - JAX Solvers: api/oracles/jax-solvers.md
+      - Gurobi Oracle: api/oracles/gurobi.md
+      - Hybrid Oracles: api/oracles/hybrid.md
+    - Algorithms: api/algorithms.md
+    - Benchmarks: api/benchmarks.md
+    - Visualization: api/visualization.md
+  - Guides:
+    - Dirac Configuration: guides/dirac-configuration.md
+    - Performance Tuning: guides/performance-tuning.md
+    - Benchmarking: guides/benchmarking.md
+    - Troubleshooting: guides/troubleshooting.md
+  - Examples:
+    - Basic Usage: examples/basic-usage.md
+    - Advanced Usage: examples/advanced-usage.md
+    - Omega Computation: examples/omega-computation.md
+    - DIMACS Graphs: examples/dimacs-graphs.md
+  - Development:
+    - Contributing: development/contributing.md
+    - Testing: development/testing.md
+    - Architecture: development/architecture.md
+
+copyright: Copyright &copy; 2024 MIS Research Team
