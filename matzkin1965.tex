@@ -1,0 +1,368 @@
+\documentclass[10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+
+\title{MAXIMA FOR GRAPHS AND A NEW PROOF OF A THEOREM OF TURÁN }
+
+\author{T. S. MOTZKIN AND E. G. STRAUS}
+\date{}
+
+
+%New command to display footnote whose markers will always be hidden
+\let\svthefootnote\thefootnote
+\newcommand\blfootnotetext[1]{%
+  \let\thefootnote\relax\footnote{#1}%
+  \addtocounter{footnote}{-1}%
+  \let\thefootnote\svthefootnote%
+}
+
+%Overriding the \footnotetext command to hide the marker if its value is `0`
+\let\svfootnotetext\footnotetext
+\renewcommand\footnotetext[2][?]{%
+  \if\relax#1\relax%
+    \ifnum\value{footnote}=0\blfootnotetext{#2}\else\svfootnotetext{#2}\fi%
+  \else%
+    \if?#1\ifnum\value{footnote}=0\blfootnotetext{#2}\else\svfootnotetext{#2}\fi%
+    \else\svfootnotetext[#1]{#2}\fi%
+  \fi
+}
+
+\begin{document}
+\maketitle
+
+
+\begin{enumerate}
+  \item Maximum of a square-free quadratic form on a simplex. The following question was suggested by a problem of J. E. MacDonald Jr. (1):
+\end{enumerate}
+
+Given a graph \(G\) with vertices \(1,2, \ldots, n\). Let \(S\) be the simplex in \(E^{n}\) given by \(x_{i} \geqslant 0, \sum x_{i}=1\). What is
+
+\[
+\max _{x \in S} \sum_{(i, j) \in G} x_{i} x_{j} ?
+\]
+
+Here \((i, j)=(j, i)\) denotes an edge of \(G\). We denote this maximum by \(f(G)\). (The minimum is 0 .) The above-mentioned problem is: Prove that \(f(G)=\frac{1}{4}\) for
+
+\[
+G=G_{0}=\{(1,2),(2,3), \ldots,(n-1, n)\}, \quad n \geqslant 2 .
+\]
+
+The general answer is as follows.\\
+Theorem 1. Let \(k\) be the order of the maximal complete graph contained in \(G\). Then
+
+\[
+f(G)=\frac{1}{2}\left(1-\frac{1}{k}\right)
+\]
+
+Proof. Let \(1, \ldots, k\) be the vertices of a complete subgraph of \(G\); then setting \(x_{1}=\ldots=x_{k}=1 / k\) and \(x_{k+1}=\ldots=x_{n}=0\), we get
+
+\[
+f(G) \geqslant\binom{ k}{2} \cdot \frac{1}{k^{2}}=\frac{1}{2}\left(1-\frac{1}{k}\right) .
+\]
+
+To prove the opposite inequality we proceed by induction of \(n\). For \(n=1\) we have \(k=1\) and \(f(G)=0\). Now assume the theorem true for graphs with fewer than \(n\) vertices. If \(f(G)=F\left(x_{1}, \ldots, x_{n}\right)\) is attained on the boundary of \(S\), then one of the \(x_{i}\) vanishes and \(f(G)=f\left(G^{\prime}\right)\), where \(G^{\prime}\) is obtained from \(G\) by deleting the corresponding vertex. Since the theorem holds for \(G^{\prime}\) we have
+
+\[
+f(G)=f\left(G^{\prime}\right)=\frac{1}{2}\left(1-\frac{1}{k^{\prime}}\right) \leqslant \frac{1}{2}\left(1-\frac{1}{k}\right) .
+\]
+
+If \(F(x)\) attains its maximum at an interior point of the simplex, we can say that \(F(x) / s^{2}(x)\) (with \(s(x)=x_{1}+\ldots+x_{n}\) ) attains this maximum at an interior point of the positive orthant. In other words,
+
+\[
+s^{2} F_{i}=2 s s_{i} F \quad \text { or } \quad F_{i}=2 F / s=2 F,
+\]
+
+\footnotetext{Received February 17, 1964. Presented to the American Mathematical Society, Notices, 11 (1964), 382.
+}
+for \(i=1, \ldots, n\), where the subscript denotes differentiation with respect to \(x_{i}\). Now if \(G\) is not a complete graph, say \((1,2) \notin G\), then
+\[
+F\left(x_{1}-c, x_{2}+c, x_{3}, \ldots, x_{n}\right)=F(x)-c\left(F_{1}(x)-F_{2}(x)\right)=F(x)
+\]
+for all \(c\). In particular, for \(c=x_{1}\),
+\[
+F\left(0, x_{1}+x_{2}, x_{3}, \ldots, x_{n}\right)=F(x)
+\]
+so that the maximum is also attained for the subgraph \(G^{\prime}\) obtained from \(G\) by deleting the vertex 1 . Thus the contention of the theorem is again true by the induction hypothesis.
+
+If \(G\) is a complete graph, then
+
+\[
+\begin{gathered}
+F(x)=\frac{1}{2}\left[\left(x_{1}+\ldots+x_{n}\right)^{2}-x_{1}^{2}-\ldots-x_{n}^{2}\right]=\frac{1}{2}\left(1-\|x\|^{2}\right) \\
+\leqslant \frac{1}{2}\left(1-\min _{\left|x_{1}\right|+\ldots+\left|x_{n}\right|=1}\|x\|^{2}\right)=\frac{1}{2}\left(1-\frac{1}{n}\right) .
+\end{gathered}
+\]
+
+This completes the proof.\\
+Corollary. If \(l\) is the order of the maximal empty subgraph of \(G\) and
+
+\[
+g(G)=\min _{S}\left\{\frac{1}{2}\left(x_{1}^{2}+\ldots+x_{n}^{2}\right)+\sum_{(i, j) \in G} x_{i} x_{j}\right\}
+\]
+
+then \(g(G)=1 /(2 l)\).\\
+Proof. If \(\bar{G}\) is the complementary graph of \(G\), then
+
+\[
+f(\bar{G})=\frac{1}{2}-g(\bar{G})=\frac{1}{2}(1-1 / l) .
+\]
+
+\section*{2. Homomorphic graphs.}
+Definition. A graph \(G_{1}\) is homomorphic to a graph \(G\) if \(G_{1}\) can be mapped onto \(G\) so that the edges of \(G\) are exactly the images of those of \(G_{1}\). If, in addition, every pair mapped on an edge of \(G\) is an edge of \(G_{1}\), then \(G_{1}\) is completely homomorphic to \(G\).
+
+Let \(G_{1}\) with vertices \(1, \ldots, n\) be homomorphic to \(G\) with vertices \(1^{*}, \ldots, m^{*}\). As before we define
+
+\[
+F_{1}(x)=\sum_{(i, j) \in G 1} x_{i} x_{j}, \quad F(y)=\sum_{\left(k^{*}, l^{*}\right) \in G} y_{i^{*}} y_{l^{*}}
+\]
+
+Then
+
+\[
+F\left(\sum_{1} x_{i}, \ldots, \sum_{m} x_{i}\right) \geqslant F_{1}(x),
+\]
+
+where \(\sum_{j}\) is extended over all pre-images of \(j^{*}\), and therefore \(f(G) \geqslant f\left(G_{1}\right)\). Hence, we do not need induction to prove Theorem 1 for graphs homomorphic to a complete graph of order \(k\) (that is, \(k\)-colourable graphs) which contain a complete subgraph of order \(k\). But even for such graphs there need not be a maximum of \(F(x)\) in the interior of \(S\). In fact, the following result obtains.
+
+Theorem 2. The form \(F(x)\) has a maximum in the interior of \(S\) if and only if \(G\) is completely homomorphic to a complete \(k\)-graph (that is, \(G\) is a maximal \(k\)-colourable graph).
+
+Proof. If \(G\) is completely homomorphic to the complete graph with vertices \(1^{*}, \ldots, k^{*}\), then all \(x\) with \(\sum_{j} x_{i}=1 / k\left(x_{i}>0, j=1, \ldots, k\right)\) give interior maxima. If, conversely, \(F(x)\) has an interior maximum \(F(x)=(1-1 / k) / 2\), then \(n \geqslant k\). For \(n=k\) the contention is trivial. Assume that \(n>k\) and the contention is true for \(n-1\). Let \((1,2) \notin G\); then as in the proof of Theorem 1, \(F^{\prime}(x)\) belonging to \(G^{\prime}\) ( \(G\) with 1 deleted) has an interior maximum. Hence \(G^{\prime}\) is completely homomorphic to the complete graph with vertices \(1^{*}, \ldots, k^{*}\). If 1 were connected with pre-images of each \(j^{*}, j=1, \ldots, k\), then \(G\) would contain a complete graph of order \(k+1\). Hence we may assume that 1 is not connected with any pre-image of \(1^{*}\). Let \(i\) be a pre-image of \(1^{*}\). Then by the induction hypothesis, the set \(H\) of all \(j\) with \((i, j) \in G\) is the set of all vertices of \(G\) that are not pre-images of 1*. But
+
+\[
+\sum_{(1, j) \in G} x_{j}=\sum_{(i, j) \in G} x_{j}
+\]
+
+and all \(x_{j}>0\), so every vertex in \(H\) is connected to 1 in \(G\). This completes the proof.
+
+Any local maximum in the interior of \(S\) is also a (global) maximum. More generally the following theorem is valid.
+
+Theorem 3. The point \(x \in S\) yields a local maximum of \(F(x)\) if and only if\\
+(1) the restriction of \(G\) to those \(j\) for which \(x_{j}>0\) is completely homomorphic to a complete \(k\)-graph (with vertices, say, \(1^{*}, \ldots, k^{*}\) ), and \(\sum_{i} x_{j}=1 / k\) for \(i=1, \ldots, k\);\\
+(2) no two vertices of \(G\) that are connected with all pre-images of the same \(k-1\) vertices among \(1^{*}, \ldots, k^{*}\) are connected with each other;\\
+(3) for every vertex \(i\) connected with at least one pre-image of each of \(1^{*}, \ldots, k^{*}\), we have \(\sum_{(i, j) \in G} x_{j}<1-1 / k\).
+
+Proof. Obviously, condition (1) is necessary because of Theorem 2 and the remark preceding Theorem 3. If (1) holds and if we compare \(F(x)\) and \(F(x+\epsilon)\), then already a consideration of the first-order variation gives (3) with \(\leqslant 1-1 / k\) instead of \(<1-1 / k\). If these two conditions hold, then the first-order variation is \(\leqslant 0\), and we need only non-positivity of the secondorder variation for vanishing first-order variation. However, if
+
+\[
+\sum_{(i, j) \in G} x_{j}=1-1 / k
+\]
+
+in (3), then there exist two pre-images \(j_{1}\) and \(j_{2}\) of different elements of \(\left(1^{*}, \ldots, k^{*}\right)\) that are not connected with \(i\), and by setting \(\epsilon_{i}>0, \epsilon_{j_{1}}=\epsilon_{j_{2}}=-\epsilon_{i} / 2\), all other \(\epsilon_{j}=0\), we obtain a positive second-order variation. Now if (2) does not hold, say for \(i_{1}, i_{2}\), and \(i^{*}\), then by (3) \(i_{1}\) and \(i_{2}\) are not connected with\\
+any pre-image \(i_{3}\) of \(i^{*}\); setting \(\epsilon_{i_{1}}=\epsilon_{i_{2}}=-\epsilon_{i_{3}} / 2>0\), all other \(\epsilon_{i}=0\), we again obtain a positive second-order variation. The sufficiency is now trivially assured.\\
+3. Non-square-free forms. The above discussion can be extended to the case
+
+\[
+F\left(x_{1}, \ldots, x_{n}\right)=\sum_{(i, j) \in G} q\left(x_{i}, x_{j}\right)
+\]
+
+where \(q(x, y)\) is a general binary quadratic form. Since the summation is symmetric, we may assume that \(q(x, y)=q(y, x)\) so that \(q(x, y)=a\left(x^{2}+y^{2}\right)\) \(+b x y\). The case \(a=0\) has been discussed already; so we may assume that \(|a|=1\), and since a change of sign only interchanges maxima and minima, we may restrict attention to \(q(x, y)=x^{2}+y^{2}+b x y\).
+
+Theorem 4. Let \(v_{i}\) denote the valence of the vertex \(i\) and let \(v(G)=\max _{G} v_{i}\).\\
+If \(v(G)>b / 2\), then \(f(G)=\max _{S} F(x)=v(G)\) and this maximum is attained only by setting \(x_{i}=1\) where \(v_{i}=v(G)\) and \(x_{j}=0\) for \(j \neq i\).
+
+If \(v(G)=b / 2\), then \(f(G)=v(G)\) and the maximum is attained by setting \(x_{j}=0\) except for the vertices of a complete subgraph all of whose vertices have valence \(v(G)\).
+
+If \(v(G)<b / 2\), then \(f(G)=b / 2-c / 2\), where \(1 / c=\max _{G^{\prime}} \sum_{G^{\prime}}\left(b-2 v_{i}\right)^{-1}\) as \(G^{\prime}\) ranges over the complete subgraphs of \(G\). This maximum is attained by setting \(x_{i}=c /\left(b-2 v_{i}\right)\) for \(i \in G^{\prime}\) and \(x_{j}=0\) for \(j \notin G^{\prime}\). Whenever \(F(x)\) has a local maximum the subgraph \(G^{\prime}\) whose vertices are the points with \(x_{i}>0\) is complete.
+
+Note that, as \(b \rightarrow \infty\), the value \(f(G) / b\) tends to that obtained in Theorem 1. However, in contrast to Theorems 2 and 3 , the maximum is only attained for \(x\) so that the points \(i\) with \(x_{i}>0\) form a complete graph.
+
+Proof. Let \(f(G)=F\left(x_{1}, \ldots, x_{n}\right)\) and let \(G^{\prime}\) be the subgraph whose vertices are the points \(i\) with \(x_{i}>0\). As in the proof of Theorem 1, we have
+
+\[
+F_{i}=2 v_{i} x_{i}+b \sum_{(i, j) \in G^{\prime}} x_{j}=2 f(G) \quad \text { for all } i \in G^{\prime}
+\]
+
+If \(G^{\prime}\) were not complete, it would contain vertices \(i, j\) with \((i, j) \notin G^{\prime}\). Then, replacing \(x_{i}\) by \(x_{i}+\epsilon\) and \(x_{j}\) by \(x_{j}-\epsilon\) would increase \(F\) by \(\left(v_{i}+v_{j}\right) \epsilon^{2}\) contrary to the assumption that \(F\) was a (local) maximum. Thus
+
+\[
+\sum_{(i, j) \in G^{\prime}} x_{j}=1-x_{i},
+\]
+
+and (4) becomes
+
+\[
+\left(2 v_{i}-b\right) x_{i}=2 f(G)-b .
+\]
+
+If \(v(G)>b / 2\), then \(f(G) \geqslant v(G)>b / 2\) and (5) implies \(v_{i}>b / 2\) for each \(i \in G^{\prime}\). If \(G^{\prime}\) contained two vertices \(i, j\), then replacing \(x_{i}\) by \(x_{i}+\epsilon\) and \(x_{j}\) by\\
+\(x_{j}-\epsilon\) would increase \(F\) by \(\left(v_{i}+v_{j}-b\right) \epsilon^{2}>0\), a contradiction. Thus \(G^{\prime}\) consists of a single vertex in this case.
+
+If \(v(G)=b / 2\), then \(f(G) \geqslant b / 2\), and therefore again \(v_{i} \geqslant b / 2\) for each \(i \in G^{\prime}\), which means \(v_{i}=b / 2\) for each \(i \in G^{\prime}\). The choice of \(x_{i}\) is then arbitrary and leads to \(f(G)=b / 2=v(G)\).
+
+If \(v(G)<b / 2\), set \(2 f(G)-b=-c\). Then according to (5) we have \(x_{i}=c /\left(b-2 v_{i}\right)\) so that \(\sum x_{i}=c \sum\left(b-2 v_{i}\right)^{-1}=1\) or \(c=\left(\sum\left(b-2 v_{i}\right)^{-1}\right)^{-1}\) and \(f(G)=b / 2-c / 2\). This completes the proof.
+
+For the general quadratic form \(q(x, y)\) the evaluation of \(\min _{s} F(x)=\phi(G)\) is also non-trivial. Partial results are contained in the following theorem.
+
+Theorem 5. (i) \(\phi(G)<0\) if \(b<-2, v(G)>0 ; \phi(G)=0\) if \(b<-2\), \(v(G)=0\), or \(b=-2\), or \(b>-2, \min _{G} v_{i}=0 ; \phi(G)>0\) if \(b>-2\), \(\min _{G} v_{i}>0\). (ii) If \(G\) has no isolated vertex and if
+
+\[
+b>\max _{(i, j) \in G}\left(v_{i}+v_{j}\right),
+\]
+
+then
+
+\[
+\phi(G)=\left(\max _{G^{\prime}} \sum_{G^{\prime}} \frac{1}{v_{i}}\right)^{-1}
+\]
+
+where \(G^{\prime}\) is any empty subgraph of \(G\). This minimum is attained by setting \(x_{i}=2 \phi(G) / v_{i}\) for \(i \in G^{\prime}\) and \(x_{j}=0\) for \(j \notin G^{\prime}\). Whenever \(F(x)\) has a local minimum in this case, the subgraph \(G^{\prime}\) whose vertices are the points \(i\) with \(x_{i}>0\) is empty.
+
+Proof. The first statement is easily verified. Assume now that
+
+\[
+b>\max _{(i, j) \in G}\left(v_{i}+v_{j}\right)
+\]
+
+and \(\phi(G)=F\left(x_{1}, \ldots, x_{n}\right)\). Let \(G^{\prime}\) be the subgraph whose vertices are the points \(i\) with \(x_{i}>0\). If \(G^{\prime}\) is non-empty, then there are two vertices \(i, j\) with \((i, j) \in G^{\prime}\). Now \(F_{i}(x)=F_{j}(x)\) and therefore replacing \(x_{i}\) by \(x_{i}+\epsilon\) and \(x_{j}\) by \(x_{j}-\epsilon\) changes \(F\) by \(\left(v_{i}+v_{j}-b\right) \epsilon^{2}<0\), contrary to the hypothesis of (local) minimality of \(F\). Thus \(G^{\prime}\) is empty and \(F(x)=\sum v_{i} x_{i}{ }^{2}\), so that \(F_{i}=2 v_{i}\) \(x_{i}=2 \phi(G)\) for \(i \in G^{\prime}\). In other words, either \(v_{i}=0\) for all \(i \in G^{\prime}\), or \(x_{i}=\phi(G) / v_{i}\) and \(\phi(G) \sum_{G^{\prime}} 1 / v_{i}=1\). This completes the proof.\\
+4. Proof of a theorem of Turán and generalizations. Turán (2) proved the following result.
+
+Theorem 6. A graph with \(n\) vertices which contains no complete subgraph of order \(k\) has no more than
+
+\[
+\begin{aligned}
+e(n, k)=m^{2}\binom{k-1}{2}+m(k-2) r+ & \binom{r}{2}, \\
+& n=(k-1) m+r, 0 \leqslant r<k-1
+\end{aligned}
+\]
+
+edges. This maximum is attained only for a graph in which the vertices are divided into \(k-1\) classes of which \(r\) contain \(m+1\) vertices and the remainder contain \(m\) vertices with two vertices connected if and only if they belong to different classes.
+
+We derive this theorem from Theorems 1 and 2.\\
+If we set \(x_{i}=1 / n, i=1, \ldots, n\), then according to Theorem 1
+
+\[
+\frac{1}{2}\left(1-\frac{1}{k-1}\right) \geqslant f(G) \geqslant F(x)=\frac{e}{n^{2}}
+\]
+
+thus
+
+\[
+e \leqslant \frac{n^{2}}{2}\left(1-\frac{1}{k-1}\right)
+\]
+
+which proves (7) for the case \(r=0\). In order to prove the remainder of the theorem for the case \(r=0\), we observe that in this case the point \(x_{i}=1 / n\) represents an interior maximum, so that by Theorem 2 the graph \(G\) is completely homomorphic to a complete ( \(k-1\) )-graph, \(C\). Since \(F_{i}=2 F\), each vertex is joined to
+
+\[
+2 n F=n(1-1 /(k-1))=(m-1)(k-1)
+\]
+
+vertices, and the number of vertices in each pre-image of a vertex of \(C\) is \(m\).\\
+We now proceed by induction on \(r\). Assume the contention true for \(r-1\). According to (8), the average valence does not exceed \(n-n /(k-1)\), so for \(r>0\) there must be a vertex with no more than
+
+\[
+n-m-1=m(k-2)+r-1
+\]
+
+edges. By the induction hypothesis, (7) holds for the graph \(G^{\prime}\) obtained by deleting such a vertex, and hence
+
+\[
+\begin{aligned}
+e & \leqslant m^{2}\binom{k-1}{2}+m(k-2)(r-1)+\binom{r-1}{2}+m(k-2)+r-1 \\
+& =m^{2}\binom{k-1}{2}+m(k-2) r+\binom{r}{2}=e(n, k) .
+\end{aligned}
+\]
+
+Thus equality is possible in (7) only if it holds for \(G^{\prime}\) and, by the induction hypothesis, this means that the vertices of \(G^{\prime}\) are divided into \(k-1\) classes with \(m+1\) or \(m\) elements each so that two vertices are connected if and only if they belong to different classes. Now, if the additional vertex were connected to elements in each class, then \(G\) would contain a complete \(k\)-graph. We can therefore adjoin it to one of the classes of \(G^{\prime}\). If that class already contained \(m+1\) elements, then the number of edges at the vertex could be no greater than \(m(k-2)+r-2\). This completes the proof.
+
+If instead of Theorem 2 we use Theorems 4 and 5, we can obtain generalizations which combine information about the number of edges with information about valences. For example, using Theorem 5, we have
+
+Theorem 7. Let \(G\) be a graph with \(n\) vertices, e edges, maximal valence \(v\), and minimal valence \(w\). If \(G\) contains no empty subgraph of order \(k\), then
+
+\[
+(1+v) e \geqslant \frac{n^{2}}{2} \frac{w}{k-1} .
+\]
+
+Or, equivalently, if \(G\) contains no complete subgraph of order \(k\), then
+
+\[
+e \leqslant\binom{ n}{2}-\frac{n^{2}}{2} \quad \frac{n-v-1}{(k-1)(n-w)} .
+\]
+
+Proof. Set
+
+\[
+q(x, y)=x^{2}+y^{2}+(2 v+2 \epsilon) x y, \quad \epsilon>0,
+\]
+
+and let \(w>0\) so that Thorem 5 applies to yield
+
+\[
+\begin{aligned}
+& F\left(\frac{1}{n}, \ldots, \frac{1}{n}\right)>\phi(G)=\left(\max _{G^{\prime}} \sum_{G^{\prime}} v_{i}^{-1}\right)^{-1} \\
+& \geqslant((k-1) / w)^{-1}=w /(k-1) .
+\end{aligned}
+\]
+
+On the other hand \(F(1 / n, \ldots, 1 / n)=(2+2 v+2 \epsilon) e / n^{2}\), so that
+
+\[
+(1+v+\epsilon) e>\frac{n^{2}}{2} \quad \frac{w}{k-1} .
+\]
+
+Since this inequality holds for every \(\epsilon>0\), we get (9). Inequality (10) is obtained by considering the complementary graph \(\bar{G}\) for which
+
+\[
+\bar{n}=n, \quad \bar{e}=\binom{n}{2}-e, \quad \bar{v}=n-1-\bar{w}, \quad \text { and } \quad \bar{w}=n-1-v .
+\]
+
+\begin{enumerate}
+  \setcounter{enumi}{4}
+  \item Theorems of Rademacher type. It is easy to see from Theorem 6 that a graph \(G\) with \(n\) vertices and \(e(n, k)+1\) edges contains more than one complete \(k\)-graph. For either the deletion of some edge reduces \(G\) to the graph described in Theorem 6, in which case \(G\) contains at least
+\end{enumerate}
+
+\[
+(m+1)^{r-1} m^{k-1-r} \quad(\text { if } r>0)
+\]
+
+or \(m^{k-2}\) (if \(r=0\) ) complete subgraphs of order \(k\), or the deletion of any edge from \(G\) yields a graph which already contains a complete \(k\)-graph. In other words, the intersection of the complete \(k\)-subgraphs of \(G\) is empty, so that \(G\) contains at least two such subgraphs. However, we can state this more precisely:
+
+Theorem 8. A graph \(G\) with \(n\) vertices which contains exactly one complete \(k\)-subgraph has no more than
+
+\[
+e^{\prime}(n, k)=e(n-1, k)+k-1
+\]
+
+edges. This bound is sharp.
+
+Proof. Let \(1, \ldots, k\) be the vertices of the complete \(k\)-subgraph. Then there are \(\binom{k}{2}\) edges \((i, j)\) with \(1 \leqslant i, j \leqslant k\), and no vertex \(l>k\) is joined to more than \(k-2\) of the vertices \(1, \ldots, k\). Thus there are no more than \((k-2)(n-k)\) edges ( \(i, l\) ) with \(1 \leqslant i \leqslant k<l \leqslant n\). Hence
+
+\[
+e^{\prime}(n, k) \leqslant\binom{ k}{2}+(k-2)(n-k)+e(n-k, k)=e(n-1, k)+k-1 .
+\]
+
+To see that this bound is sharp, we consider a graph \(G^{\prime}\) with \(n-1\) vertices of the type described in Theorem 6 and adjoin one vertex which is joined to exactly one vertex in each of the \(k-1\) classes of \(G^{\prime}\).
+
+It would not be difficult to give similar bounds under the assumption that the graph contains no more than some fixed number of complete \(k\)-subgraphs.
+
+In view of Theorem 2 we can state the following result.\\
+Theorem 9. If the function \(F\left(x_{1}, \ldots, x_{n}\right)\) attains its maximum ( \(1-1 / k\) )/2 at an interior point of the simplex \(S\), then \(G\) contains at least \((k-1)(n-k / 2)\) edges and at least \(n-k+1\) complete \(k\)-graphs.
+
+Proof. According to Theorem 2 the graph \(G\) is completely homomorphic to a complete \(k\)-graph. Let the elements of the \(k\)-graph have \(n_{1}, n_{2}, \ldots, n_{k}\) pre-images. Then \(n_{1}+\ldots+n_{k}=n\) and the number of edges is
+
+\[
+e=\sum n_{i} n_{j} \geqslant(k-1)(n-k / 2),
+\]
+
+where the minimum is attained by setting \(n_{1}=\ldots=n_{k-1}=1\) and \(n_{k}=n-k+1\). The number of complete \(k\)-subgraphs is
+
+\[
+\Pi n_{i} \geqslant n-k+1,
+\]
+
+where the minimum is again attained for the above choice of \(n_{i}\).
+
+\section*{References}
+\begin{enumerate}
+  \item J. E. MacDonald Jr., \({ }^{9}\) Problem E1643, Amer. Math. Monthly, 70 (1963), 1099.
+  \item P. Turán, On the theory of graphs, Colloq. Math., 3 (1954), 19-30.
+\end{enumerate}
+
+University of California, Los Angeles
+
+
+\end{document}

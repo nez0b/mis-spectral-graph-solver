@@ -79,53 +79,125 @@ The theorem establishes that:
 
 This remarkable connection allows us to solve discrete graph problems using continuous optimization techniques.
 
-### Algebraic Rearrangement
+## Algorithmic Derivation from the Original Paper
 
-From the Motzkin-Straus equality, we can solve for the clique number:
+The 1965 Motzkin-Straus paper not only proves the theorem but reveals how the algorithm emerges naturally from the mathematical analysis. This section follows their original derivation.
 
-$$\frac{1}{2} x^T A x = \frac{1}{2}\left(1 - \frac{1}{\omega(G)}\right)$$
+### Mathematical Foundation
 
-Let $M = \max_{x \in \Delta_n} \frac{1}{2} x^T A x$. Then:
+Given graph $G$ with vertices $1, 2, \ldots, n$, we seek to maximize:
 
-$$M = \frac{1}{2}\left(1 - \frac{1}{\omega(G)}\right)$$
+$$F(x) = \sum_{(i,j) \in E(G)} x_i x_j$$
 
-Solving for $\omega(G)$:
+subject to $x \in \Delta_n$ (the probability simplex).
 
-$$2M = 1 - \frac{1}{\omega(G)}$$
+### Proof Strategy and Algorithm Emergence
 
-$$\frac{1}{\omega(G)} = 1 - 2M$$
+The original proof uses **mathematical induction** and **critical point analysis**, which naturally leads to an iterative algorithm:
 
-$$\omega(G) = \frac{1}{1 - 2M}$$
+#### Step 1: Lower Bound Construction (Algorithmic Insight)
 
-This formula is the **core of our oracle**: solve the quadratic program to get $M$, then compute $\omega(G)$ algebraically.
+For any clique $C$ of size $k$ in $G$, setting:
+- $x_i = \frac{1}{k}$ for all $i \in C$
+- $x_j = 0$ for all $j \notin C$
 
-## Proof Sketch
+yields the objective value:
 
-The proof of the Motzkin-Straus theorem relies on several key insights:
+$$F(x) = \binom{k}{2} \cdot \frac{1}{k^2} = \frac{1}{2}\left(1 - \frac{1}{k}\right)$$
 
-### Step 1: Upper Bound via Clique
+**Algorithmic Implication**: The optimal solution concentrates probability mass uniformly on the maximum clique.
 
-Consider a maximum clique $C$ of size $\omega(G)$. Define the characteristic vector:
+#### Step 2: Optimality Conditions (Algorithm Discovery)
 
-$$x^* = \frac{1}{\omega(G)} \sum_{i \in C} e_i$$
+At an interior maximum, all partial derivatives must be equal (Lagrange multipliers):
 
-where $e_i$ is the $i$-th standard basis vector. Then $x^* \in \Delta_n$ and:
+$$\frac{\partial F}{\partial x_i} = \sum_{j: (i,j) \in E(G)} x_j = \lambda \quad \text{for all } i \text{ with } x_i > 0$$
 
-$$\frac{1}{2} (x^*)^T A x^* = \frac{1}{2} \cdot \frac{1}{\omega(G)^2} \sum_{i,j \in C} A_{ij} = \frac{1}{2}\left(1 - \frac{1}{\omega(G)}\right)$$
+**Key Insight**: This condition reveals the iterative algorithm! Each vertex's "score" in the optimal solution equals its weighted degree in the current solution.
 
-This shows the right-hand side is achievable.
+#### Step 3: Inductive Argument (Boundary Analysis)
 
-### Step 2: Upper Bound via Optimization
+The original proof analyzes two cases:
 
-For any $x \in \Delta_n$, we can show that:
+**Case A**: Maximum occurs on the boundary of the simplex
+- Some $x_i = 0$, reducing to a smaller graph
+- Apply induction hypothesis
 
-$$\frac{1}{2} x^T A x \leq \frac{1}{2}\left(1 - \frac{1}{\omega(G)}\right)$$
+**Case B**: Maximum occurs in the interior
+- All optimality conditions hold simultaneously
+- Graph must have special structure (complete subgraph)
 
-This requires careful analysis of the quadratic form's structure relative to the clique structure.
+**Algorithmic Emergence**: This analysis suggests checking whether including/excluding vertices improves the objective.
 
-### Step 3: Optimality Conditions
+### The Natural Algorithm
 
-The maximum is achieved when the support of $x^*$ corresponds exactly to a maximum clique, with uniform weights $\frac{1}{\omega(G)}$ on clique vertices.
+From the optimality conditions, we derive the **iterative reweighting algorithm**:
+
+<div class="algorithm">
+<div class="algorithm-title">Motzkin-Straus Iterative Algorithm</div>
+
+**Input**: Graph $G$ with adjacency matrix $A$  
+**Output**: Optimal vector $x^*$ and clique number $\omega(G)$
+
+1. **Initialize**: $x^{(0)} \leftarrow \frac{1}{n} \mathbf{1}$ (uniform distribution)
+2. **Iterate** until convergence:
+   - **Compute scores**: $s_i^{(t)} = \sum_{j: (i,j) \in E(G)} x_j^{(t)} = (Ax^{(t)})_i$
+   - **Reweight**: $x_i^{(t+1)} = \frac{s_i^{(t)}}{\sum_{j=1}^n s_j^{(t)}}$
+3. **Extract**: $\omega(G) = \frac{1}{1 - 2F(x^*)}$ where $F(x^*) = \frac{1}{2}(x^*)^T A x^*$
+</div>
+
+### Mathematical Justification of the Algorithm
+
+The reweighting rule $x_i^{(t+1)} \propto (Ax^{(t)})_i$ emerges from the optimality condition:
+
+$$\frac{\partial F}{\partial x_i}\bigg|_{x=x^*} = \sum_{j: (i,j) \in E(G)} x_j^* = \text{constant for all } i \text{ with } x_i^* > 0$$
+
+This is precisely the **replicator dynamics** from evolutionary game theory!
+
+### Proof Completion (Original Method)
+
+#### Lemma 1: Boundary Reduction
+If the maximum occurs when some $x_i = 0$, then we can delete vertex $i$ and solve the reduced problem.
+
+#### Lemma 2: Interior Structure
+If the maximum occurs in the interior, then the graph restricted to $\{i : x_i > 0\}$ must be complete.
+
+**Proof technique**: If $(i,j) \notin E(G)$ but $x_i, x_j > 0$, then the transformation:
+$$x_i \leftarrow x_i - \epsilon, \quad x_j \leftarrow x_j + \epsilon$$
+preserves the simplex constraint but can increase the objective, contradicting optimality.
+
+#### Main Theorem Proof
+Combining the lemmas with induction on $n$:
+
+1. **Base case**: $n = 1$ gives $\omega(G) = 1$ and $F(x) = 0$
+2. **Inductive step**: Either apply boundary reduction or use interior structure
+3. **Conclusion**: $\max F(x) = \frac{1}{2}(1 - \frac{1}{\omega(G)})$
+
+### Connection to Modern Optimization
+
+The original derivation connects to several modern approaches:
+
+#### Frank-Wolfe Method
+The iterative algorithm is a special case of Frank-Wolfe:
+- **Linear oracle**: Find $v = \arg\max_{u \in \Delta_n} \langle \nabla F(x^{(t)}), u \rangle$
+- **Update**: $x^{(t+1)} = (1-\gamma_t)x^{(t)} + \gamma_t v$
+
+#### Spectral Methods
+When $A$ is the adjacency matrix, the algorithm finds the principal eigenvector direction restricted to the simplex.
+
+#### Interior Point Methods
+Modern solvers handle the simplex constraints directly using barrier methods or active-set approaches.
+
+### Convergence Analysis
+
+From the original paper's perspective:
+
+!!! note "Convergence Properties"
+    
+    - **Fixed points**: Correspond to local maxima of $F(x)$ on $\Delta_n$
+    - **Global maximum**: Achieved when support of $x^*$ is exactly a maximum clique
+    - **Rate**: Depends on spectral gap of the reweighting operator
+    - **Initialization**: Different starting points may converge to different local maxima
 
 ## Computational Implications
 

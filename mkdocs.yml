@@ -1,10 +1,10 @@
 site_name: Motzkin-Straus MIS Solver
 site_description: Maximum Independent Set solver using the Motzkin-Straus theorem and quantum computing
 site_author: MIS Research Team
-site_url: https://motzkinstraus.github.io
+site_url: https://nez0b.github.io/motzkin-straus
 
 repo_name: Motzkin-Straus MIS Solver
-repo_url: https://github.com/your-org/MotzkinStraus
+repo_url: https://github.com/nez0b/mis-spectral-graph-solver
 edit_uri: edit/main/docs/
 
 theme:
@@ -107,9 +107,9 @@ extra_css:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-org/MotzkinStraus
+      link: https://github.com/nez0b/mis-spectral-graph-solver
     - icon: fontawesome/solid/book
-      link: https://motzkinstraus.github.io
+      link: https://nez0b.github.io/motzkinstraus
   analytics:
     provider: google
     property: G-XXXXXXXXXX  # Replace with actual Google Analytics ID
@@ -118,6 +118,7 @@ nav:
   - Home: index.md
   - Theory:
     - Motzkin-Straus Theorem: theory/motzkin-straus.md
+    - Decision-to-Search Reduction: theory/decision-to-search.md
     - Algorithms Overview: theory/algorithms.md
     - Complexity Analysis: theory/complexity.md
   - Getting Started:
@@ -141,13 +142,10 @@ nav:
     - Benchmarking: guides/benchmarking.md
     - Troubleshooting: guides/troubleshooting.md
   - Examples:
-    - Basic Usage: examples/basic-usage.md
-    - Advanced Usage: examples/advanced-usage.md
     - Omega Computation: examples/omega-computation.md
-    - DIMACS Graphs: examples/dimacs-graphs.md
   - Development:
     - Contributing: development/contributing.md
     - Testing: development/testing.md
     - Architecture: development/architecture.md
 
-copyright: Copyright &copy; 2024 MIS Research Team
+copyright: Copyright &copy; 2025 PoJen Wang

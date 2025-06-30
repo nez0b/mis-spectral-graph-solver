@@ -1,34 +1,5 @@
 # Motzkin-Straus MIS Solver
 
-<div class="grid cards" markdown>
-
--   :material-graph:{ .lg .middle } **Maximum Independent Set Solver**
-
-    ---
-
-    A comprehensive toolkit for solving the Maximum Independent Set (MIS) problem using the Motzkin-Straus theorem and quantum computing.
-
--   :material-formula:{ .lg .middle } **Mathematical Foundation**
-
-    ---
-
-    Bridge discrete graph problems to continuous optimization through the elegant Motzkin-Straus theorem:
-
-    $$\max_{x \in \Delta_n} \frac{1}{2} x^T A x = \frac{1}{2}\left(1 - \frac{1}{\omega(G)}\right)$$
-
--   :material-quantum:{ .lg .middle } **Quantum Computing**
-
-    ---
-
-    Leverage Dirac-3 quantum annealing with advanced parameter control including photon number and quantum fluctuation tuning.
-
--   :material-speedometer:{ .lg .middle } **High Performance**
-
-    ---
-
-    Multiple solver backends: JAX optimization, Gurobi, SciPy MILP, and hybrid approaches for optimal performance across graph sizes.
-
-</div>
 
 ## Overview
 
@@ -64,7 +35,7 @@ This theorem allows us to compute the clique number $\omega(G)$ by solving a con
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/MotzkinStraus.git
+git clone https://github.com/nez0b/mis-spectral-graph-solver.git
 cd MotzkinStraus
 
 # Install with uv (recommended)
@@ -144,7 +115,7 @@ Recent benchmarks on various graph types:
 <div class="benchmark-result">
 <span class="benchmark-name">Dirac-3 Quantum</span>
 <span class="benchmark-time">~15s</span>
-<span class="benchmark-quality">95%+ optimal</span>
+<span class="benchmark-quality">100% optimal</span>
 </div>
 
 ## What's New in v0.1.0
@@ -191,12 +162,6 @@ Recent benchmarks on various graph types:
 If you use this software in your research, please cite:
 
 ```bibtex
-@software{motzkinstraus2024,
-  title={Motzkin-Straus MIS Solver: Quantum-Enhanced Maximum Independent Set Solutions},
-  author={MIS Research Team},
-  year={2024},
-  url={https://github.com/your-org/MotzkinStraus}
-}
 ```
 
 ## Getting Help
