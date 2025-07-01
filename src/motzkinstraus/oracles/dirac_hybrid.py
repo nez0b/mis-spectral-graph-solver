@@ -26,12 +26,15 @@ class DiracNetworkXHybridOracle(Oracle):
         sum_constraint: Constraint for solution variables sum (default: 1).
         mean_photon_number: Optional mean photon number override (default: None).
         quantum_fluctuation_coefficient: Optional quantum fluctuation coefficient override (default: None).
+        save_raw_data: Whether to save the raw response from Dirac solver (default: False).
+        raw_data_path: Directory path to save raw data files (default: 'data/' in project root).
     """
     
     def __init__(self, threshold_nodes: int = 35, num_samples: int = 10, 
                  relax_schedule: int = 2, solution_precision: float = 0.001,
                  sum_constraint: int = 1, mean_photon_number: Optional[float] = None,
-                 quantum_fluctuation_coefficient: Optional[int] = None):
+                 quantum_fluctuation_coefficient: Optional[int] = None, save_raw_data: bool = False,
+                 raw_data_path: Optional[str] = None):
         super().__init__()
         
         self.threshold_nodes = threshold_nodes
@@ -41,6 +44,8 @@ class DiracNetworkXHybridOracle(Oracle):
         self.sum_constraint = sum_constraint
         self.mean_photon_number = mean_photon_number
         self.quantum_fluctuation_coefficient = quantum_fluctuation_coefficient
+        self.save_raw_data = save_raw_data
+        self.raw_data_path = raw_data_path
         
         # Import and check availability of Dirac solver
         try:
@@ -142,7 +147,9 @@ class DiracNetworkXHybridOracle(Oracle):
                 solution_precision=self.solution_precision,
                 sum_constraint=self.sum_constraint,
                 mean_photon_number=self.mean_photon_number,
-                quantum_fluctuation_coefficient=self.quantum_fluctuation_coefficient
+                quantum_fluctuation_coefficient=self.quantum_fluctuation_coefficient,
+                save_raw_data=self.save_raw_data,
+                raw_data_path=self.raw_data_path
             )
             
             # Use Dirac solver

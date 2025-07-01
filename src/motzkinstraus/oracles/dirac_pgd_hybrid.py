@@ -48,6 +48,8 @@ class DiracPGDHybridOracle(Oracle):
         pgd_learning_rate: Learning rate for PGD refinement (default: 0.01).
         fallback_num_restarts: Number of restarts for PGD fallback mode (default: 20).
         verbose: Whether to print detailed progress information (default: False).
+        save_raw_data: Whether to save the raw response from Dirac solver (default: False).
+        raw_data_path: Directory path to save raw data files (default: 'data/' in project root).
     """
     
     def __init__(
@@ -63,7 +65,9 @@ class DiracPGDHybridOracle(Oracle):
         pgd_max_iterations: int = 5000,
         pgd_learning_rate: float = 0.01,
         fallback_num_restarts: int = 20,
-        verbose: bool = False
+        verbose: bool = False,
+        save_raw_data: bool = False,
+        raw_data_path: Optional[str] = None
     ):
         super().__init__()
         
@@ -86,7 +90,9 @@ class DiracPGDHybridOracle(Oracle):
                     solution_precision=dirac_solution_precision,
                     sum_constraint=dirac_sum_constraint,
                     mean_photon_number=dirac_mean_photon_number,
-                    quantum_fluctuation_coefficient=dirac_quantum_fluctuation_coefficient
+                    quantum_fluctuation_coefficient=dirac_quantum_fluctuation_coefficient,
+                    save_raw_data=save_raw_data,
+                    raw_data_path=raw_data_path
                 )
             except Exception as e:
                 if self.verbose:

@@ -17,6 +17,9 @@ Dirac-3 API Parameters:
 """
 
 import numpy as np
+import json
+import time
+from pathlib import Path
 from typing import Optional
 from .base import Oracle
 from ..exceptions import OracleError, SolverUnavailableError
@@ -47,11 +50,14 @@ class DiracOracle(Oracle):
         sum_constraint: Constraint for solution variables sum (default: 1).
         mean_photon_number: Optional mean photon number override (default: None).
         quantum_fluctuation_coefficient: Optional quantum fluctuation coefficient override (default: None).
+        save_raw_data: Whether to save the raw response from Dirac solver (default: False).
+        raw_data_path: Directory path to save raw data files (default: 'data/' in project root).
     """
     
     def __init__(self, num_samples: int = 100, relax_schedule: int = 2, solution_precision: float = 0.001,
                  sum_constraint: int = 1, mean_photon_number: Optional[float] = None, 
-                 quantum_fluctuation_coefficient: Optional[int] = None):
+                 quantum_fluctuation_coefficient: Optional[int] = None, save_raw_data: bool = False,
+                 raw_data_path: Optional[str] = None):
         super().__init__()
         if not self.is_available:
             raise SolverUnavailableError(
@@ -65,6 +71,8 @@ class DiracOracle(Oracle):
         self.sum_constraint = sum_constraint
         self.mean_photon_number = mean_photon_number
         self.quantum_fluctuation_coefficient = quantum_fluctuation_coefficient
+        self.save_raw_data = save_raw_data
+        self.raw_data_path = raw_data_path or "data"
         
         # Test connection
         try:
@@ -161,6 +169,10 @@ class DiracOracle(Oracle):
             
             response = solver.solve(model, **solve_params)
             
+            # Save raw response data if requested
+            if self.save_raw_data:
+                self._save_raw_response(response, n)
+            
             # Process the response
             if response and "results" in response and "solutions" in response["results"]:
                 solutions = response["results"]["solutions"]
@@ -199,3 +211,40 @@ class DiracOracle(Oracle):
         """
         objective_value, _ = self._solve_and_get_vector(adjacency_matrix)
         return objective_value
+
+    def _save_raw_response(self, response: dict, n_vars: int) -> None:
+        """
+        Save the raw response from Dirac solver to a JSON file.
+        
+        Args:
+            response: Raw response dictionary from Dirac solver.
+            n_vars: Number of variables in the problem.
+        """
+        try:
+            # Create save directory
+            save_dir = Path(self.raw_data_path)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename with timestamp and problem size
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = save_dir / f"dirac_response_{timestamp}_{n_vars}vars.json"
+            
+            # Convert numpy arrays to lists for JSON serialization
+            def convert_for_json(obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                else:
+                    return str(obj)  # Fallback for other non-serializable types
+            
+            # Save the response
+            with open(filename, 'w') as f:
+                json.dump(response, f, indent=2, default=convert_for_json)
+            
+            print(f"Saved raw Dirac response to {filename}")
+            
+        except Exception as e:
+            print(f"Warning: Failed to save raw Dirac response: {e}")

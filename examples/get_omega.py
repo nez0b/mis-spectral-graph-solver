@@ -32,6 +32,14 @@ import networkx as nx
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
+# Import matplotlib for histogram plotting
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
+
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -99,11 +107,11 @@ except ImportError:
 
 # List of solvers to run (comment out to disable)
 OMEGA_SOLVERS = [
-    "jax_pgd",           # JAX Projected Gradient Descent Oracle
+    # "jax_pgd",           # JAX Projected Gradient Descent Oracle
     # "jax_mirror",        # JAX Mirror Descent Oracle  
     # "gurobi_oracle",     # Gurobi Oracle (Motzkin-Straus)
     # "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
-    "scipy_milp",        # SciPy MILP (Direct combinatorial)
+    # "scipy_milp",        # SciPy MILP (Direct combinatorial)
     # "networkx_exact",    # NetworkX exact (small graphs only)
     "dirac_oracle",      # Dirac Oracle
     # "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
@@ -112,6 +120,7 @@ OMEGA_SOLVERS = [
 # Solver configuration parameters
 OMEGA_CONFIG = {
     'timeout_per_solver': 120.0,
+    'plot_histograms': True,          # Whether to plot energy histograms for Dirac solver
     
     # JAX Oracle configurations
     'jax_config': {
@@ -135,12 +144,14 @@ OMEGA_CONFIG = {
     
     # Dirac configuration
     'dirac_config': {
-        'num_samples': 50,                # Number of quantum annealing samples
+        'num_samples': 100,                # Number of quantum annealing samples
         'relax_schedule': 3,              # Relaxation schedule parameter
         'solution_precision': None,       # Solution precision
         'sum_constraint': 1,              # Simplex constraint (default)
-        'mean_photon_number': 0.0015,     # Example: Override default photon number
-        'quantum_fluctuation_coefficient': 3  # Example: Override default fluctuation
+        'mean_photon_number': 0.0005,     # Example: Override default photon number
+        'quantum_fluctuation_coefficient': 10,  # Example: Override default fluctuation
+        'save_raw_data': True,            # Save raw response from Dirac solver
+        'raw_data_path': 'data'           # Directory to save raw data files
     },
     
     # Dirac-PGD Hybrid configuration
@@ -367,7 +378,9 @@ class DiracOracleOmegaSolver(OmegaSolver):
                     solution_precision=config['solution_precision'],
                     sum_constraint=config['sum_constraint'],
                     mean_photon_number=config['mean_photon_number'],
-                    quantum_fluctuation_coefficient=config['quantum_fluctuation_coefficient']
+                    quantum_fluctuation_coefficient=config['quantum_fluctuation_coefficient'],
+                    save_raw_data=config.get('save_raw_data', False),
+                    raw_data_path=config.get('raw_data_path', 'data')
                 )
             except Exception:
                 self.oracle = None
@@ -526,6 +539,88 @@ def run_omega_computation(graph: nx.Graph, graph_name: str, quiet: bool = False)
     return results
 
 
+def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bool = True) -> bool:
+    """
+    Plot histogram of energies from the most recent Dirac solver response.
+    
+    Args:
+        graph_name: Name of the graph for plot title.
+        data_dir: Directory containing saved Dirac response files.
+        show_plot: Whether to display the plot immediately.
+        
+    Returns:
+        True if histogram was successfully created, False otherwise.
+    """
+    if not MATPLOTLIB_AVAILABLE:
+        print("Warning: matplotlib not available, cannot plot histogram")
+        return False
+    
+    try:
+        # Find the most recent Dirac response file
+        data_path = Path(data_dir)
+        if not data_path.exists():
+            print(f"Warning: Data directory {data_dir} does not exist")
+            return False
+        
+        json_files = list(data_path.glob("dirac_response_*.json"))
+        if not json_files:
+            print(f"Warning: No Dirac response files found in {data_dir}")
+            return False
+        
+        # Get the most recent file
+        latest_file = max(json_files, key=lambda p: p.stat().st_mtime)
+        print(f"📊 Plotting histogram from: {latest_file.name}")
+        
+        # Load the JSON data
+        with open(latest_file, 'r') as f:
+            response = json.load(f)
+        
+        # Extract energies from the response
+        if "results" in response and "energies" in response["results"]:
+            energies = response["results"]["energies"]
+            
+            if not energies:
+                print("Warning: No energies found in response")
+                return False
+            
+            # Create the histogram
+            plt.figure(figsize=(10, 6))
+            plt.hist(energies, bins=20, edgecolor='black', alpha=0.7)
+            
+            # Find the best (minimum) energy for the vertical line
+            best_energy = min(energies)
+            plt.axvline(x=best_energy, color='red', linestyle='--', linewidth=2, 
+                       label=f'Best Energy: {best_energy:.6f}')
+            
+            # Labels and title
+            plt.xlabel('Energy')
+            plt.ylabel('Frequency')
+            plt.title(f'{graph_name}: Energy Distribution from Dirac Solver\n'
+                     f'Samples: {len(energies)}, Best: {best_energy:.6f}')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            
+            # Save the plot
+            plot_file = data_path / f"energy_histogram_{graph_name.replace(' ', '_')}.png"
+            plt.savefig(plot_file, dpi=150, bbox_inches='tight')
+            print(f"💾 Saved histogram to: {plot_file}")
+            
+            # Show the plot if requested
+            if show_plot:
+                plt.show()
+            else:
+                plt.close()
+            
+            return True
+        else:
+            print("Warning: No energies found in Dirac response structure")
+            return False
+            
+    except Exception as e:
+        print(f"Error creating energy histogram: {e}")
+        return False
+
+
 def create_omega_summary(results: Dict[str, Tuple[int, float, bool, str]], format_type: str = "table") -> str:
     """Create summary of ω computation results."""
     if format_type == "json":
@@ -612,6 +707,7 @@ Examples:
     parser.add_argument("--quiet", action="store_true", help="Suppress detailed output")
     parser.add_argument("--format", choices=["table", "json", "csv"], default="table",
                        help="Output format (default: table)")
+    parser.add_argument("--no-plot", action="store_true", help="Disable energy histogram plotting")
     
     args = parser.parse_args()
     
@@ -646,6 +742,17 @@ Examples:
         # Create and display summary
         summary = create_omega_summary(results, format_type=args.format)
         print(summary)
+        
+        # Plot energy histogram if Dirac solver was used and plotting is enabled
+        if (OMEGA_CONFIG.get('plot_histograms', False) and not args.no_plot 
+            and "dirac_oracle" in OMEGA_SOLVERS):
+            dirac_results = results.get("Dirac Oracle", (0, 0.0, False, ""))
+            if dirac_results[2]:  # If Dirac solver was successful
+                if not args.quiet:
+                    print(f"\n📊 Creating energy histogram...")
+                plot_energy_histogram(graph_name, 
+                                    data_dir=OMEGA_CONFIG['dirac_config'].get('raw_data_path', 'data'),
+                                    show_plot=not args.quiet)
         
         if not args.quiet:
             print(f"\n🎉 ω computation completed successfully!")
