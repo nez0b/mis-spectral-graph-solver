@@ -24,11 +24,11 @@ import numpy as np
 from pathlib import Path
 from typing import Set, Tuple, Dict
 
-# Add current directory to path for imports
-sys.path.insert(0, os.path.dirname(__file__))
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Import DIMACS reader
-from demo_dimacs_clique_solvers import read_dimacs_graph
+from motzkinstraus.io import read_dimacs_graph
 
 # Dirac solver's MIS solution from complement graph
 # These nodes should form a clique in the original C125.9 graph

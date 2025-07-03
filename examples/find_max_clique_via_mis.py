@@ -33,11 +33,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-# Import DIMACS reader and existing infrastructure
-from demo_dimacs_clique_solvers import read_dimacs_graph
+# Import DIMACS reader
+from motzkinstraus.io import read_dimacs_graph
 
 # Import motzkin-straus package components
 from motzkinstraus import (

@@ -18,10 +18,10 @@ from pathlib import Path
 import argparse
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Import DIMACS reader
-from demo_dimacs_clique_solvers import read_dimacs_graph
+from motzkinstraus.io import read_dimacs_graph
 
 
 def analyze_graph_properties(graph, name):

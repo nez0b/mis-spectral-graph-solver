@@ -378,7 +378,8 @@ def run_multi_restart_optimization(
     num_vars: int,
     config: JAXOptimizerConfig,
     algorithm: str = "pgd",
-    seed: int = 42
+    seed: int = 42,
+    key: Optional[jax.random.PRNGKey] = None
 ) -> Tuple[jnp.ndarray, float, List[jnp.ndarray], List[float]]:
     """
     Run optimization with multiple Dirichlet initializations using jax.vmap for parallel execution.
@@ -389,7 +390,8 @@ def run_multi_restart_optimization(
         num_vars: Number of variables.
         config: Optimization configuration.
         algorithm: "pgd" or "md".
-        seed: Random seed.
+        seed: Random seed (used only if key is None).
+        key: JAX random key for reproducible randomness. If None, uses seed.
         
     Returns:
         Tuple of (best_x, best_energy, all_histories, all_final_energies).
@@ -397,7 +399,9 @@ def run_multi_restart_optimization(
     if not JAX_AVAILABLE:
         raise ImportError("JAX is not available. Install with: pip install jax jaxlib")
     
-    key = jax.random.PRNGKey(seed)
+    # Use provided key or create one from seed
+    if key is None:
+        key = jax.random.PRNGKey(seed)
     
     # Generate Dirichlet initializations
     alpha = jnp.ones(num_vars) * config.dirichlet_alpha

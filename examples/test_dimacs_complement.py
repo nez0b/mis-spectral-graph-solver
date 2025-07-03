@@ -22,56 +22,15 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+# Import DIMACS reader
+from motzkinstraus.io import read_dimacs_graph
 
 from motzkinstraus.benchmarks.networkx_comparison import (
     NetworkXComparisonBenchmark, 
     run_algorithm_comparison
 )
-
-def read_dimacs_graph(filename):
-    """
-    Read a graph from DIMACS format file.
-    
-    DIMACS format:
-    - Lines starting with 'c' are comments
-    - Line starting with 'p edge n m' defines problem with n nodes and m edges
-    - Lines starting with 'e u v' define edges between nodes u and v
-    
-    Args:
-        filename (str): Path to DIMACS format file
-        
-    Returns:
-        nx.Graph: NetworkX graph representation
-    """
-    graph = nx.Graph()
-    
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-                
-            if line.startswith('c'):
-                # Comment line, skip
-                continue
-            elif line.startswith('p edge'):
-                # Problem definition: p edge <num_nodes> <num_edges>
-                parts = line.split()
-                if len(parts) >= 3:
-                    num_nodes = int(parts[2])
-                    # Add nodes 1 through num_nodes (DIMACS uses 1-based indexing)
-                    graph.add_nodes_from(range(1, num_nodes + 1))
-            elif line.startswith('e'):
-                # Edge definition: e <node1> <node2>
-                parts = line.split()
-                if len(parts) >= 3:
-                    u, v = int(parts[1]), int(parts[2])
-                    graph.add_edge(u, v)
-    
-    return graph
 
 def load_dimacs_complement_graph(graph_name):
     

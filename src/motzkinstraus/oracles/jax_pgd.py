@@ -14,8 +14,10 @@ from ..jax_optimizers import (
 )
 
 try:
+    import jax
     import jax.numpy as jnp
 except ImportError:
+    jax = None
     jnp = None
 
 
@@ -114,7 +116,7 @@ class ProjectedGradientDescentOracle(Oracle):
         # For non-trivial cases, use the parent implementation (which handles call counting)
         return super().get_omega(graph)
     
-    def solve_quadratic_program(self, adjacency_matrix: np.ndarray, x0: Optional[np.ndarray] = None) -> float:
+    def solve_quadratic_program(self, adjacency_matrix: np.ndarray, x0: Optional[np.ndarray] = None, key: Optional[jax.random.PRNGKey] = None) -> float:
         """
         Solve the Motzkin-Straus quadratic program using Projected Gradient Descent.
         
@@ -122,6 +124,7 @@ class ProjectedGradientDescentOracle(Oracle):
             adjacency_matrix: The adjacency matrix of the graph.
             x0: Optional initial point. If provided, runs single-start refinement mode.
                 If None, runs multi-restart discovery mode.
+            key: Optional JAX random key for reproducible randomness. If None, uses default seed.
             
         Returns:
             The optimal value of the quadratic program.
@@ -136,6 +139,7 @@ class ProjectedGradientDescentOracle(Oracle):
             self.last_histories = []
             self.last_final_energies = []
             self.last_best_restart_idx = 0
+            self.x_current = jnp.array([])  # Empty solution for empty graph
             return 0.0
         if np.sum(adjacency_matrix) == 0:  # No edges
             # Handle graph with no edges - populate dummy optimization details
@@ -143,6 +147,7 @@ class ProjectedGradientDescentOracle(Oracle):
             self.last_histories = [dummy_history] * self.config.num_restarts
             self.last_final_energies = [0.0] * self.config.num_restarts
             self.last_best_restart_idx = 0
+            self.x_current = jnp.ones(n) / n  # Uniform solution for graph with no edges
             return 0.0
         
         try:
@@ -155,6 +160,7 @@ class ProjectedGradientDescentOracle(Oracle):
                 self.last_histories = [dummy_history] * self.config.num_restarts
                 self.last_final_energies = [0.0] * self.config.num_restarts
                 self.last_best_restart_idx = 0
+                self.x_current = jnp.ones(n) / n  # Uniform solution for case with no terms
                 return 0.0
             
             if x0 is not None:
@@ -184,6 +190,7 @@ class ProjectedGradientDescentOracle(Oracle):
                 self.last_histories = [energy_history]
                 self.last_final_energies = [best_energy]
                 self.last_best_restart_idx = 0
+                self.x_current = best_x  # Store final solution for experiment access
                 
             else:
                 # Multi-restart discovery mode
@@ -196,13 +203,15 @@ class ProjectedGradientDescentOracle(Oracle):
                     num_vars=n,
                     config=self.config,
                     algorithm="pgd",
-                    seed=42  # Fixed seed for reproducibility
+                    seed=42,  # Fixed seed for reproducibility (used if key is None)
+                    key=key   # Pass the provided key for true randomization
                 )
                 
                 # Store results for debugging
                 self.last_histories = all_histories
                 self.last_final_energies = all_final_energies
                 self.last_best_restart_idx = all_final_energies.index(max(all_final_energies))
+                self.x_current = best_x  # Store final solution for experiment access
             
             if self.config.verbose:
                 print(f"PGD Oracle: Best energy = {best_energy:.6f} from restart {self.last_best_restart_idx}")
