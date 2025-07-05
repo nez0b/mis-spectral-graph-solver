@@ -56,13 +56,13 @@ from motzkinstraus.solvers.omega import create_omega_solvers
 
 # List of solvers to run (comment out to disable)
 OMEGA_SOLVERS = [
-    "jax_pgd",           # JAX Projected Gradient Descent Oracle
+    # "jax_pgd",           # JAX Projected Gradient Descent Oracle
     # "jax_mirror",        # JAX Mirror Descent Oracle  
     # "gurobi_oracle",     # Gurobi Oracle (Motzkin-Straus)
-    "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
-    "scipy_milp",        # SciPy MILP (Direct combinatorial)
+    # "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
+    # "scipy_milp",        # SciPy MILP (Direct combinatorial)
     # "networkx_exact",    # NetworkX exact (small graphs only)
-    # "dirac_oracle",      # Dirac Oracle
+    "dirac_oracle",      # Dirac Oracle
     # "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
 ]
 
@@ -94,13 +94,18 @@ OMEGA_CONFIG = {
     # Dirac configuration
     'dirac_config': {
         'num_samples': 100,                # Number of quantum annealing samples
-        'relax_schedule': 2,              # Relaxation schedule parameter
+        'relax_schedule': 4,              # Relaxation schedule parameter
         'solution_precision': None,       # Solution precision
         'sum_constraint': 1,              # Simplex constraint (default)
         'mean_photon_number': None,     # Example: Override default photon number
         'quantum_fluctuation_coefficient': 1,  # Example: Override default fluctuation
         'save_raw_data': True,            # Save raw response from Dirac solver
-        'raw_data_path': 'data'           # Directory to save raw data files
+        'raw_data_path': 'data',           # Directory to save raw data files
+        # Batch collection parameters (for collecting >100 samples)
+        'num_batch_runs': 10,              # Number of API calls to make (default: 1 for compatibility)
+        'batch_size': 100,                # Samples per API call (max: 100)
+        'combine_batch_results': True,    # Whether to aggregate results across batches
+        'batch_delay': 1.0,               # Delay between API calls in seconds (rate limiting)
     },
     
     # Dirac-PGD Hybrid configuration
@@ -170,7 +175,165 @@ def run_omega_computation(graph: nx.Graph, graph_name: str, quiet: bool = False)
     return results
 
 
-def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bool = True) -> bool:
+# =============================================================================
+# THEORETICAL OMEGA LINES - MATHEMATICAL HELPERS
+# =============================================================================
+
+def energy_to_omega(energy: float) -> float:
+    """
+    Convert energy to equivalent clique number using inverse Motzkin-Straus formula.
+    
+    Formula: energy = -1/2 * (1 - 1/ω), so ω = 1/(1 + 2*energy)
+    
+    Args:
+        energy: Energy value from Dirac solver (should be negative)
+        
+    Returns:
+        Equivalent clique number (omega), or NaN if energy is non-negative
+    """
+    if energy >= 0:
+        return float('nan')
+    return 1.0 / (1.0 + 2.0 * energy)
+
+
+def omega_to_energy(omega: int) -> float:
+    """
+    Convert clique number to theoretical energy using Motzkin-Straus formula.
+    
+    Formula: energy = -1/2 * (1 - 1/ω) = -0.5 * (1 - 1/ω)
+    
+    Args:
+        omega: Clique number (should be >= 2)
+        
+    Returns:
+        Theoretical energy value, or -inf if omega <= 1
+    """
+    if omega <= 1:
+        return float('-inf')
+    return -0.5 * (1.0 - 1.0 / omega)
+
+
+def get_omega_range(energies: List[float], buffer: int = 1) -> Tuple[Optional[int], Optional[int]]:
+    """
+    Determine relevant omega range from observed energies with adaptive buffering.
+    
+    Args:
+        energies: List of energy values from Dirac solver
+        buffer: Number of extra omega values to show on each side
+        
+    Returns:
+        Tuple of (start_omega, end_omega) for plotting, or (None, None) if invalid
+    """
+    if not energies:
+        return None, None
+    
+    min_energy = min(energies)
+    max_energy = max(energies)
+    
+    if min_energy >= 0:
+        return None, None  # Invalid energy range for Motzkin-Straus
+    
+    omega_for_min = energy_to_omega(min_energy)
+    omega_for_max = energy_to_omega(max_energy)
+    
+    if not (omega_for_min > 1 and omega_for_max > 1):
+        return None, None
+    
+    # Add buffer and ensure valid range (start from omega=2 minimum)
+    start_omega = max(2, int(omega_for_max) - buffer)
+    end_omega = int(omega_for_min) + buffer
+    
+    return start_omega, end_omega
+
+
+def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False, 
+                    max_lines: int = 8) -> bool:
+    """
+    Add theoretical omega lines to the histogram based on Motzkin-Straus formula.
+    
+    Args:
+        ax: Matplotlib axes object
+        energies: List of energy values from Dirac solver
+        show_theory_lines: Whether to add the theoretical lines
+        max_lines: Maximum number of lines to prevent visual clutter
+        
+    Returns:
+        True if lines were added successfully, False otherwise
+    """
+    if not show_theory_lines:
+        return False
+    
+    if not energies or min(energies) >= 0:
+        print("Warning: Cannot display theoretical lines for non-negative energies")
+        return False
+    
+    start_omega, end_omega = get_omega_range(energies)
+    if start_omega is None or end_omega is None:
+        print("Warning: Could not determine valid omega range for theoretical lines")
+        return False
+    
+    # Limit number of lines to prevent visual clutter
+    if end_omega - start_omega > max_lines:
+        end_omega = start_omega + max_lines
+        print(f"Limiting theoretical lines to {max_lines} (ω = {start_omega} to {end_omega})")
+    
+    # Get plot boundaries and actual energy data bounds
+    y_max = ax.get_ylim()[1]
+    energy_min, energy_max = min(energies), max(energies)
+    
+    # Add small buffer to energy range for theoretical line visibility
+    energy_range = energy_max - energy_min
+    buffer = max(0.1 * energy_range, 0.01)  # 10% buffer or minimum 0.01
+    data_x_min = energy_min - buffer
+    data_x_max = energy_max + buffer
+    
+    # Debug logging
+    print(f"Debug: Energy range: {energy_min:.6f} to {energy_max:.6f}")
+    print(f"Debug: Plot range: ω={start_omega} to ω={end_omega}")
+    
+    lines_added = 0
+    for omega in range(start_omega, end_omega + 1):
+        energy_val = omega_to_energy(omega)
+        
+        # Check if theoretical energy is within reasonable range of actual data
+        in_data_range = data_x_min <= energy_val <= data_x_max
+        print(f"Debug: ω={omega}: energy={energy_val:.6f}, in_data_range={in_data_range}")
+        
+        # Always draw lines for omega values derived from the energy data
+        # This ensures relevant theoretical lines are always visible
+        if in_data_range:
+            ax.axvline(x=energy_val, color='#7f7f7f', linestyle='--', 
+                      alpha=0.8, zorder=2, linewidth=1.5)
+            ax.text(energy_val, y_max * 0.9, f' ω={omega}',
+                   rotation=90, verticalalignment='bottom', 
+                   color='#7f7f7f', fontsize=9, fontweight='bold')
+            lines_added += 1
+            
+            # Extend plot x-axis to ensure theoretical line is visible
+            current_xlim = ax.get_xlim()
+            new_x_min = min(current_xlim[0], energy_val - 0.01)
+            new_x_max = max(current_xlim[1], energy_val + 0.01)
+            ax.set_xlim(new_x_min, new_x_max)
+    
+    if lines_added > 0:
+        # Add formula annotation in upper-left corner
+        formula_text = r'$E = -\frac{1}{2}(1-\frac{1}{\omega})$'
+        ax.text(0.05, 0.95, formula_text, transform=ax.transAxes,
+                fontsize=11, verticalalignment='top', fontweight='bold',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.8))
+        
+        # Add single legend entry for all theory lines
+        ax.plot([], [], color='#7f7f7f', linestyle='--', alpha=0.8, 
+               label='Theoretical Energy (ω)')
+        
+        print(f"Added {lines_added} theoretical omega lines (ω = {start_omega} to {start_omega + lines_added - 1})")
+        return True
+    
+    return False
+
+
+def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bool = True, 
+                          show_theory_lines: bool = False, max_theory_lines: int = 8) -> bool:
     """
     Plot histogram of energies from the most recent Dirac solver response.
     
@@ -178,6 +341,8 @@ def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bo
         graph_name: Name of the graph for plot title.
         data_dir: Directory containing saved Dirac response files.
         show_plot: Whether to display the plot immediately.
+        show_theory_lines: Whether to add theoretical omega lines to the histogram.
+        max_theory_lines: Maximum number of theoretical lines to display.
         
     Returns:
         True if histogram was successfully created, False otherwise.
@@ -214,22 +379,59 @@ def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bo
                 print("Warning: No energies found in response")
                 return False
             
-            # Create the histogram
-            plt.figure(figsize=(10, 6))
-            plt.hist(energies, bins=20, edgecolor='black', alpha=0.7)
+            # Check if this is a batch collection result
+            batch_info = response["results"].get("batch_info", None)
+            is_batch = batch_info is not None
             
-            # Find the best (minimum) energy for the vertical line
+            # Create the histogram
+            plt.figure(figsize=(12, 7) if is_batch else (10, 6))
+            plt.hist(energies, bins=30 if is_batch else 20, edgecolor='black', alpha=0.7)
+            
+            # Find energy statistics
             best_energy = min(energies)
-            plt.axvline(x=best_energy, color='red', linestyle='--', linewidth=2, 
-                       label=f'Best Energy: {best_energy:.6f}')
+            min_energy = min(energies)
+            max_energy = max(energies)
             
             # Labels and title
             plt.xlabel('Energy')
             plt.ylabel('Frequency')
-            plt.title(f'{graph_name}: Energy Distribution from Dirac Solver\n'
-                     f'Samples: {len(energies)}, Best: {best_energy:.6f}')
+            
+            if is_batch:
+                num_batches = batch_info["num_batches"]
+                total_samples = batch_info["total_samples"]
+                avg_per_batch = total_samples // num_batches
+                plt.title(f'{graph_name}: Energy Distribution from Dirac Solver\n'
+                         f'Batch Collection: {num_batches} batches × ~{avg_per_batch} samples = {total_samples} total\n'
+                         f'Best Energy: {best_energy:.6f}')
+                
+                # Add batch statistics with vertical lines
+                plt.axvline(x=best_energy, color='red', linestyle='--', linewidth=2, 
+                           label=f'Best: {best_energy:.6f}')
+                if min_energy != best_energy:
+                    plt.axvline(x=min_energy, color='orange', linestyle=':', linewidth=2,
+                               label=f'Min: {min_energy:.6f}')
+                if max_energy != best_energy:
+                    plt.axvline(x=max_energy, color='green', linestyle=':', linewidth=2,
+                               label=f'Max: {max_energy:.6f}')
+                
+                # Add mean and std to legend
+                mean_energy = sum(energies) / len(energies)
+                plt.axvline(x=mean_energy, color='blue', linestyle='-', alpha=0.7,
+                           label=f'Mean: {mean_energy:.6f}')
+            else:
+                plt.title(f'{graph_name}: Energy Distribution from Dirac Solver\n'
+                         f'Samples: {len(energies)}, Best: {best_energy:.6f}')
+                
+                # Single mode - just show best energy
+                plt.axvline(x=best_energy, color='red', linestyle='--', linewidth=2, 
+                           label=f'Best Energy: {best_energy:.6f}')
+            
+            # Add theoretical omega lines if requested
+            add_theory_lines(plt.gca(), energies, show_theory_lines, max_theory_lines)
+            
             plt.legend()
             plt.grid(True, alpha=0.3)
+            plt.xlim(min(energies) - 0.01, max(energies) + 0.01)
             
             # Save the plot
             plot_file = data_path / f"energy_histogram_{graph_name.replace(' ', '_')}.png"
@@ -332,6 +534,10 @@ Examples:
   python examples/get_omega.py DIMACS/complete_k5.dimacs
   python examples/get_omega.py DIMACS/erdos_renyi_15_p05.dimacs --quiet
   python examples/get_omega.py DIMACS/petersen.dimacs --format json
+  python examples/get_omega.py DIMACS/triangle.dimacs --batch-runs 5
+  python examples/get_omega.py DIMACS/triangle.dimacs --batch-runs 3 --batch-size 75
+  python examples/get_omega.py DIMACS/test_10_node.dimacs --show-theory
+  python examples/get_omega.py DIMACS/keller4.clq --batch-runs 2 --show-theory
         """
     )
     parser.add_argument("dimacs_file", help="Path to DIMACS format file")
@@ -339,8 +545,32 @@ Examples:
     parser.add_argument("--format", choices=["table", "json", "csv"], default="table",
                        help="Output format (default: table)")
     parser.add_argument("--no-plot", action="store_true", help="Disable energy histogram plotting")
+    parser.add_argument("--batch-runs", type=int, default=1,
+                       help="Number of batch runs for Dirac solver (default: 1)")
+    parser.add_argument("--batch-size", type=int, default=100,
+                       help="Samples per batch for Dirac solver (max: 100, default: 100)")
+    parser.add_argument("--show-theory", action="store_true",
+                       help="Show theoretical energy lines for different omega values")
     
     args = parser.parse_args()
+    
+    # Validate batch parameters
+    if args.batch_runs < 1:
+        print("❌ Error: --batch-runs must be at least 1")
+        return 1
+    if args.batch_size < 1 or args.batch_size > 100:
+        print("❌ Error: --batch-size must be between 1 and 100 (API limit)")
+        return 1
+    
+    # Update configuration with CLI arguments
+    if args.batch_runs != 1 or args.batch_size != 100:
+        OMEGA_CONFIG['dirac_config']['num_batch_runs'] = args.batch_runs
+        OMEGA_CONFIG['dirac_config']['batch_size'] = args.batch_size
+        
+        # Display batch information
+        total_samples = args.batch_runs * args.batch_size
+        if not args.quiet:
+            print(f"🔄 Batch mode enabled: {args.batch_runs} batches × {args.batch_size} samples = {total_samples} total samples")
     
     if not args.quiet:
         print("🎯 Maximum Clique Size (ω) Computation")
@@ -383,7 +613,8 @@ Examples:
                     print(f"\n📊 Creating energy histogram...")
                 plot_energy_histogram(graph_name, 
                                     data_dir=OMEGA_CONFIG['dirac_config'].get('raw_data_path', 'data'),
-                                    show_plot=not args.quiet)
+                                    show_plot=not args.quiet,
+                                    show_theory_lines=args.show_theory)
         
         if not args.quiet:
             print(f"\n🎉 ω computation completed successfully!")

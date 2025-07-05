@@ -7,8 +7,10 @@ methods (Motzkin-Straus) and direct MILP formulations.
 """
 
 import time
+import json
 import networkx as nx
 from typing import Dict, List, Tuple, Optional
+from pathlib import Path
 
 # Import availability flags and components
 from .. import GUROBI_AVAILABLE, SCIPY_MILP_AVAILABLE
@@ -253,6 +255,7 @@ class DiracOracleOmegaSolver(OmegaSolver):
     
     def __init__(self, config: Dict):
         super().__init__("Dirac Oracle")
+        self.config = config  # Store full config for batch parameters
         if not DIRAC_AVAILABLE:
             self.oracle = None
         else:
@@ -274,6 +277,17 @@ class DiracOracleOmegaSolver(OmegaSolver):
         if not self.is_available():
             return 0, 0.0, False, "Dirac Oracle not available"
         
+        # Check for batch mode
+        num_batches = self.config.get('num_batch_runs', 1)
+        batch_size = self.config.get('batch_size', 100)
+        
+        if num_batches > 1:
+            return self._compute_omega_batch_mode(graph, num_batches, batch_size)
+        else:
+            return self._compute_omega_single_mode(graph)
+    
+    def _compute_omega_single_mode(self, graph: nx.Graph) -> Tuple[int, float, bool, str]:
+        """Single batch mode (original behavior)."""
         start_time = time.time()
         try:
             omega = self.oracle.get_omega(graph)  # Use existing method!
@@ -282,6 +296,135 @@ class DiracOracleOmegaSolver(OmegaSolver):
         except Exception as e:
             runtime = time.time() - start_time
             return 0, runtime, False, str(e)
+    
+    def _compute_omega_batch_mode(self, graph: nx.Graph, num_batches: int, batch_size: int) -> Tuple[int, float, bool, str]:
+        """Batch mode: collect multiple API calls and combine results."""
+        start_time = time.time()
+        batch_delay = self.config.get('batch_delay', 1.0)
+        
+        print(f"🔄 Starting batch collection: {num_batches} batches of {batch_size} samples each...")
+        
+        all_batch_results = []
+        combined_energies = []
+        best_omega = 0
+        
+        try:
+            # Create batch-specific oracle for each call
+            for batch_idx in range(num_batches):
+                print(f"  Batch {batch_idx + 1}/{num_batches}...")
+                
+                # Create oracle with current batch size
+                batch_oracle = DiracOracle(
+                    num_samples=batch_size,
+                    relax_schedule=self.config['relax_schedule'],
+                    solution_precision=self.config['solution_precision'],
+                    sum_constraint=self.config['sum_constraint'],
+                    mean_photon_number=self.config['mean_photon_number'],
+                    quantum_fluctuation_coefficient=self.config['quantum_fluctuation_coefficient'],
+                    save_raw_data=True,  # Always save for aggregation
+                    raw_data_path=self.config.get('raw_data_path', 'data')
+                )
+                
+                # Get omega for this batch
+                batch_omega = batch_oracle.get_omega(graph)
+                best_omega = max(best_omega, batch_omega)
+                
+                # Extract energies from the saved raw data
+                batch_energies = self._extract_energies_from_last_response(
+                    self.config.get('raw_data_path', 'data')
+                )
+                
+                if batch_energies:
+                    combined_energies.extend(batch_energies)
+                    all_batch_results.append({
+                        'batch_index': batch_idx,
+                        'omega': batch_omega,
+                        'num_samples': len(batch_energies),
+                        'energies': batch_energies
+                    })
+                
+                # Add delay between API calls (except for last batch)
+                if batch_idx < num_batches - 1:
+                    time.sleep(batch_delay)
+            
+            # Save combined results
+            if self.config.get('save_raw_data', False) and combined_energies:
+                self._save_combined_batch_results(
+                    all_batch_results, combined_energies, 
+                    self.config.get('raw_data_path', 'data')
+                )
+            
+            runtime = time.time() - start_time
+            total_samples = len(combined_energies)
+            
+            print(f"✅ Batch collection complete: {total_samples} total samples, best ω = {best_omega}")
+            
+            return best_omega, runtime, True, f"Collected {total_samples} samples from {num_batches} batches"
+            
+        except Exception as e:
+            runtime = time.time() - start_time
+            return 0, runtime, False, f"Batch collection failed: {str(e)}"
+    
+    def _extract_energies_from_last_response(self, data_dir: str) -> List[float]:
+        """Extract energies from the most recent Dirac response file."""
+        try:
+            data_path = Path(data_dir)
+            if not data_path.exists():
+                return []
+            
+            # Find the most recent Dirac response file
+            json_files = list(data_path.glob("dirac_response_*.json"))
+            if not json_files:
+                return []
+            
+            latest_file = max(json_files, key=lambda p: p.stat().st_mtime)
+            
+            with open(latest_file, 'r') as f:
+                response = json.load(f)
+            
+            if "results" in response and "energies" in response["results"]:
+                return response["results"]["energies"]
+            else:
+                return []
+                
+        except Exception as e:
+            print(f"Warning: Could not extract energies from response: {e}")
+            return []
+    
+    def _save_combined_batch_results(self, all_batch_results: List[Dict], 
+                                   combined_energies: List[float], data_dir: str):
+        """Save combined batch results in a format compatible with histogram plotting."""
+        try:
+            data_path = Path(data_dir)
+            data_path.mkdir(exist_ok=True)
+            
+            # Create combined response structure
+            combined_response = {
+                "results": {
+                    "energies": combined_energies,
+                    "batch_info": {
+                        "num_batches": len(all_batch_results),
+                        "total_samples": len(combined_energies),
+                        "batches": all_batch_results
+                    }
+                },
+                "metadata": {
+                    "is_batch_collection": True,
+                    "batch_timestamp": time.time()
+                }
+            }
+            
+            # Save with timestamp
+            timestamp = int(time.time())
+            combined_file = data_path / f"dirac_response_batch_{timestamp}.json"
+            
+            with open(combined_file, 'w') as f:
+                json.dump(combined_response, f, indent=2)
+            
+            print(f"💾 Saved combined batch results to: {combined_file}")
+            
+        except Exception as e:
+            print(f"Warning: Could not save combined batch results: {e}")
     
     def is_available(self) -> bool:
         return DIRAC_AVAILABLE and self.oracle is not None and self.oracle.is_available
