@@ -446,7 +446,7 @@ def compute_omega_from_file(
     input_path = Path(input_file)
     
     # Determine file type and load QPLIB data
-    if input_path.suffix.lower() == '.dimacs':
+    if input_path.suffix.lower() in ['.dimacs', '.clq']:
         print(f"📁 Converting DIMACS file: {input_file}")
         qplib_file = dimacs_to_qplib_file(input_file)
         qplib_data = load_qplib_file(qplib_file)
@@ -454,7 +454,7 @@ def compute_omega_from_file(
         print(f"📁 Loading QPLIB file: {input_file}")
         qplib_data = load_qplib_file(input_file)
     else:
-        raise ValueError(f"Unsupported file type: {input_path.suffix}. Use .json, .qplib.json, or .dimacs")
+        raise ValueError(f"Unsupported file type: {input_path.suffix}. Use .json, .qplib.json, .dimacs, or .clq")
     
     # Transform to QCI format
     file_name = f"{input_path.stem}_optimization"
@@ -673,18 +673,19 @@ def plot_energy_histogram(
 def main():
     """Main function with CLI interface."""
     parser = argparse.ArgumentParser(
-        description="Graph to Omega computation using direct QCI client API - supports both DIMACS and QPLIB formats",
+        description="Graph to Omega computation using direct QCI client API - supports DIMACS/CLQ and QPLIB formats",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python scripts/graph_to_omega.py qplib_18.json
   python scripts/graph_to_omega.py DIMACS/triangle.dimacs --num-samples 200
+  python scripts/graph_to_omega.py graph.clq --num-samples 100
   python scripts/graph_to_omega.py data.json --relax-schedule 4 --format json
   python scripts/graph_to_omega.py input.dimacs --solution-precision 0.001
         """
     )
     
-    parser.add_argument("input_file", help="Path to DIMACS or QPLIB JSON file")
+    parser.add_argument("input_file", help="Path to DIMACS/CLQ or QPLIB JSON file")
     parser.add_argument("--num-samples", type=int, default=100, 
                        help="Number of Dirac samples (default: 100)")
     parser.add_argument("--relax-schedule", type=int, default=2,

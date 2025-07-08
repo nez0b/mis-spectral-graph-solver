@@ -59,10 +59,10 @@ OMEGA_SOLVERS = [
     # "jax_pgd",           # JAX Projected Gradient Descent Oracle
     # "jax_mirror",        # JAX Mirror Descent Oracle  
     # "gurobi_oracle",     # Gurobi Oracle (Motzkin-Straus)
-    # "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
+    "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
     # "scipy_milp",        # SciPy MILP (Direct combinatorial)
     # "networkx_exact",    # NetworkX exact (small graphs only)
-    "dirac_oracle",      # Dirac Oracle
+    # "dirac_oracle",      # Dirac Oracle
     # "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
 ]
 
@@ -102,7 +102,7 @@ OMEGA_CONFIG = {
         'save_raw_data': True,            # Save raw response from Dirac solver
         'raw_data_path': 'data',           # Directory to save raw data files
         # Batch collection parameters (for collecting >100 samples)
-        'num_batch_runs': 10,              # Number of API calls to make (default: 1 for compatibility)
+        'num_batch_runs': 5,              # Number of API calls to make (default: 1 for compatibility)
         'batch_size': 100,                # Samples per API call (max: 100)
         'combine_batch_results': True,    # Whether to aggregate results across batches
         'batch_delay': 1.0,               # Delay between API calls in seconds (rate limiting)

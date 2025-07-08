@@ -205,10 +205,10 @@ def submit_to_dirac(
     # Validate parameters
     if not 1 <= relaxation_schedule <= 4:
         raise ValueError("relaxation_schedule must be between 1 and 4")
-    if not 1 <= num_samples <= 1000:
-        raise ValueError("num_samples must be between 1 and 1000")
-    if not 1 <= sum_constraint <= 10000:
-        raise ValueError("sum_constraint must be between 1 and 10000")
+    if not 1 <= num_samples <= 100:
+        raise ValueError("num_samples must be between 1 and 100")
+    if not 1 <= sum_constraint <= 1600:
+        raise ValueError("sum_constraint must be between 1 and 1600")
     
     try:
         # Initialize QCI client

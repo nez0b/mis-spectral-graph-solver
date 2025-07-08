@@ -12,6 +12,7 @@ Examples:
     python scripts/output_to_histogram.py dirac_response_20250706_131958_125vars.json
     python scripts/output_to_histogram.py response.json --show-theory --save-histogram
     python scripts/output_to_histogram.py data.json --no-theory --output-prefix analysis
+    python scripts/output_to_histogram.py regularized_response.json --show-theory --regularized 0.1
 """
 
 import sys
@@ -69,6 +70,64 @@ def omega_to_energy(omega: int) -> float:
     if omega <= 1:
         return float('-inf')
     return -0.5 * (1.0 - 1.0 / omega)
+
+
+def regularized_energy_to_omega(energy: float, c: float) -> float:
+    """
+    Convert energy to equivalent clique number using inverse regularized Motzkin-Straus formula.
+    
+    For polynomial representation with coefficient 1.0, the relationship is:
+    energy = -(ω-1)/(2ω) - c/ω, solving for ω:
+    ω = (1-2c)/(1 + 2*energy)
+    
+    Args:
+        energy: Energy value from Dirac solver (should be negative)
+        c: Regularization parameter in [0, 1]
+        
+    Returns:
+        Equivalent clique number (omega), or NaN if energy is non-negative
+    """
+    if energy >= 0:
+        return float('nan')
+    
+    # Special case: c = 0 (no regularization)
+    if c == 0.0:
+        return energy_to_omega(energy)
+    
+    # Special case: c = 0.5 (degenerate case for polynomial representation)
+    if abs(c - 0.5) < 1e-12:
+        return float('nan')  # Not well-defined (numerator becomes 0)
+    
+    # General case: c ∈ [0, 1], c ≠ 0.5
+    denominator = 1.0 + 2.0 * energy
+    if abs(denominator) < 1e-12:  # Avoid division by zero
+        return float('inf')
+    
+    return (1.0 - 2.0 * c) / denominator
+
+
+def regularized_omega_to_energy(omega: int, c: float) -> float:
+    """
+    Convert clique number to theoretical energy using regularized Motzkin-Straus formula.
+    
+    Formula for polynomial representation: energy = -(ω-1)/(2ω) - c/ω
+    
+    Args:
+        omega: Clique number (should be >= 2)
+        c: Regularization parameter in [0, 1]
+        
+    Returns:
+        Theoretical energy value, or -inf if omega <= 1
+    """
+    if omega <= 1:
+        return float('-inf')
+    
+    # Special case: c = 0 (no regularization)
+    if c == 0.0:
+        return omega_to_energy(omega)
+    
+    # General case: regularized formula
+    return -(omega - 1.0) / (2.0 * omega) - c / omega
 
 
 # =============================================================================
@@ -175,13 +234,14 @@ def extract_energies_and_metadata(response_data: Dict[str, Any]) -> Tuple[List[f
 # ENHANCED THEORY LINES FUNCTIONALITY (copied from graph_to_omega.py)
 # =============================================================================
 
-def get_omega_range(energies: List[float], buffer: int = 1) -> Tuple[Optional[int], Optional[int]]:
+def get_omega_range(energies: List[float], buffer: int = 1, regularization_c: Optional[float] = None) -> Tuple[Optional[int], Optional[int]]:
     """
     Determine relevant omega range from observed energies with adaptive buffering.
     
     Args:
         energies: List of energy values from Dirac solver
         buffer: Number of extra omega values to show on each side
+        regularization_c: Regularization parameter for regularized formulas (None for standard)
         
     Returns:
         Tuple of (start_omega, end_omega) for plotting, or (None, None) if invalid
@@ -195,8 +255,13 @@ def get_omega_range(energies: List[float], buffer: int = 1) -> Tuple[Optional[in
     if min_energy >= 0:
         return None, None  # Invalid energy range for Motzkin-Straus
     
-    omega_for_min = energy_to_omega(min_energy)
-    omega_for_max = energy_to_omega(max_energy)
+    # Use appropriate formula based on regularization
+    if regularization_c is not None:
+        omega_for_min = regularized_energy_to_omega(min_energy, regularization_c)
+        omega_for_max = regularized_energy_to_omega(max_energy, regularization_c)
+    else:
+        omega_for_min = energy_to_omega(min_energy)
+        omega_for_max = energy_to_omega(max_energy)
     
     if not (omega_for_min > 1 and omega_for_max > 1):
         return None, None
@@ -209,7 +274,7 @@ def get_omega_range(energies: List[float], buffer: int = 1) -> Tuple[Optional[in
 
 
 def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False, 
-                    max_lines: int = 8) -> bool:
+                    max_lines: int = 8, regularization_c: Optional[float] = None) -> bool:
     """
     Add theoretical omega lines to the histogram based on Motzkin-Straus formula.
     
@@ -218,6 +283,7 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
         energies: List of energy values from Dirac solver
         show_theory_lines: Whether to add the theoretical lines
         max_lines: Maximum number of lines to prevent visual clutter
+        regularization_c: Regularization parameter for regularized formulas (None for standard)
         
     Returns:
         True if lines were added successfully, False otherwise
@@ -229,7 +295,7 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
         print("Warning: Cannot display theoretical lines for non-negative energies")
         return False
     
-    start_omega, end_omega = get_omega_range(energies)
+    start_omega, end_omega = get_omega_range(energies, regularization_c=regularization_c)
     if start_omega is None or end_omega is None:
         print("Warning: Could not determine valid omega range for theoretical lines")
         return False
@@ -255,7 +321,11 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
     
     lines_added = 0
     for omega in range(start_omega, end_omega + 1):
-        energy_val = omega_to_energy(omega)
+        # Use appropriate formula based on regularization
+        if regularization_c is not None:
+            energy_val = regularized_omega_to_energy(omega, regularization_c)
+        else:
+            energy_val = omega_to_energy(omega)
         
         # Check if theoretical energy is within reasonable range of actual data
         in_data_range = data_x_min <= energy_val <= data_x_max
@@ -273,20 +343,26 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
             
             # Extend plot x-axis to ensure theoretical line is visible
             current_xlim = ax.get_xlim()
-            new_x_min = min(current_xlim[0], energy_val - 0.01)
-            new_x_max = max(current_xlim[1], energy_val + 0.01)
+            new_x_min = min(current_xlim[0], energy_val * 1.001)
+            new_x_max = max(current_xlim[1], energy_val * 0.999)
             ax.set_xlim(new_x_min, new_x_max)
     
     if lines_added > 0:
         # Add formula annotation in upper-left corner
-        formula_text = r'$E = -\frac{1}{2}(1-\frac{1}{\omega})$'
+        if regularization_c is not None:
+            formula_text = r'$E = -\frac{\omega-1}{2\omega} - \frac{c}{\omega}$' + f' (c={regularization_c})'
+            label_text = f'Theoretical Energy (ω, c={regularization_c})'
+        else:
+            formula_text = r'$E = -\frac{1}{2}(1-\frac{1}{\omega})$'
+            label_text = 'Theoretical Energy (ω)'
+            
         ax.text(0.05, 0.95, formula_text, transform=ax.transAxes,
                 fontsize=11, verticalalignment='top', fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.8))
         
         # Add single legend entry for all theory lines
         ax.plot([], [], color='#7f7f7f', linestyle='--', alpha=0.8, 
-               label='Theoretical Energy (ω)')
+               label=label_text)
         
         print(f"Added {lines_added} theoretical omega lines (ω = {start_omega} to {start_omega + lines_added - 1})")
         return True
@@ -303,7 +379,8 @@ def plot_energy_histogram(
     metadata: Dict[str, Any],
     show_theory_lines: bool = False,
     save_path: Optional[str] = None,
-    output_prefix: str = "output"
+    output_prefix: str = "output",
+    regularization_c: Optional[float] = None
 ) -> bool:
     """
     Plot histogram of energies from Dirac response with enhanced theoretical omega lines.
@@ -327,8 +404,11 @@ def plot_energy_histogram(
         job_name = metadata.get('job_name', 'Unknown Job')
         num_samples = metadata['num_samples']
         
-        # Calculate omega from best energy
-        omega = energy_to_omega(best_energy)
+        # Calculate omega from best energy using appropriate formula
+        if regularization_c is not None:
+            omega = regularized_energy_to_omega(best_energy, regularization_c)
+        else:
+            omega = energy_to_omega(best_energy)
         
         plt.figure(figsize=(12, 7))
         plt.hist(energies, bins=25, edgecolor='black', alpha=0.7, color='steelblue')
@@ -338,7 +418,7 @@ def plot_energy_histogram(
                    label=f'Best Energy: {best_energy:.6f}')
         
         # Add enhanced theoretical omega lines if requested
-        theory_added = add_theory_lines(plt.gca(), energies, show_theory_lines)
+        theory_added = add_theory_lines(plt.gca(), energies, show_theory_lines, regularization_c=regularization_c)
         plt.xlim(min(energies) - 0.005, max(energies) + 0.005)
         
         plt.xlabel('Energy', fontsize=12)
@@ -393,6 +473,7 @@ Examples:
   python scripts/output_to_histogram.py dirac_response_20250706_131958_125vars.json
   python scripts/output_to_histogram.py response.json --show-theory --save-histogram
   python scripts/output_to_histogram.py data.json --no-theory --output-prefix analysis
+  python scripts/output_to_histogram.py regularized_response.json --show-theory --regularized 0.1
         """
     )
     
@@ -401,6 +482,8 @@ Examples:
                        help="Show theoretical omega lines in histogram")
     parser.add_argument("--no-theory", action="store_true",
                        help="Explicitly disable theoretical omega lines")
+    parser.add_argument("--regularized", type=float, metavar="C", default=None,
+                       help="Use regularized formulas with parameter c (e.g., --regularized 0.1)")
     parser.add_argument("--save-histogram", action="store_true",
                        help="Save histogram to PNG file")
     parser.add_argument("--output-prefix", type=str, default="output",
@@ -445,7 +528,8 @@ Examples:
             metadata=metadata,
             show_theory_lines=show_theory,
             save_path=save_path,
-            output_prefix=args.output_prefix
+            output_prefix=args.output_prefix,
+            regularization_c=args.regularized
         )
         
         if success:
@@ -459,7 +543,11 @@ Examples:
             print(f"Status: {metadata['status']}")
             print(f"Total samples: {metadata['num_samples']}")
             print(f"Best energy: {metadata['best_energy']:.6f}")
-            print(f"Estimated ω: {energy_to_omega(metadata['best_energy']):.3f}")
+            if args.regularized is not None:
+                estimated_omega = regularized_energy_to_omega(metadata['best_energy'], args.regularized)
+                print(f"Estimated ω: {estimated_omega:.3f} (regularized c={args.regularized})")
+            else:
+                print(f"Estimated ω: {energy_to_omega(metadata['best_energy']):.3f}")
             print(f"Energy range: [{metadata['energy_range'][0]:.6f}, {metadata['energy_range'][1]:.6f}]")
             if show_theory:
                 print(f"Theoretical lines: Enabled")

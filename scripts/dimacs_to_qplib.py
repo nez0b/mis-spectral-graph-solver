@@ -173,13 +173,13 @@ def print_conversion_summary(dimacs_file: str, qplib_data: Dict[str, Any], graph
 def main():
     """Main function to handle command-line interface and execution."""
     parser = argparse.ArgumentParser(
-        description="Convert DIMACS graph files to QPLIB JSON format for Motzkin-Straus optimization",
+        description="Convert DIMACS/CLQ graph files to QPLIB JSON format for Motzkin-Straus optimization",
         epilog="Example: python scripts/dimacs_to_qplib.py DIMACS/test_10_node.dimacs output.json"
     )
     
     parser.add_argument(
         "input", 
-        help="Input DIMACS file path"
+        help="Input DIMACS/CLQ file path"
     )
     parser.add_argument(
         "output", 

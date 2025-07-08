@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import math
 import networkx as nx
 import numpy as np
-from typing import Union
+from typing import Union, Optional
 
 
 class Oracle(ABC):
@@ -53,7 +53,7 @@ class Oracle(ABC):
         """
         pass
     
-    def get_omega(self, graph: nx.Graph) -> int:
+    def get_omega(self, graph: nx.Graph, regularization_c: Optional[float] = None) -> int:
         """
         Find the clique number omega(G) of a graph using the Motzkin-Straus theorem.
         This method is robust to small floating point errors from approximate solvers
@@ -61,6 +61,9 @@ class Oracle(ABC):
         
         Args:
             graph: A networkx graph.
+            regularization_c: Optional regularization parameter. If provided,
+                            applies identity regularization x^T(A + cI)x instead of x^T A x.
+                            This helps eliminate spurious solutions. Common values: 0.5, 1.0.
             
         Returns:
             The clique number omega(G).
@@ -89,8 +92,16 @@ class Oracle(ABC):
                 print(f"  → Trivial case: no edges, ω = 1")
             return 1
 
-        # Get adjacency matrix and solve the quadratic program
+        # Get adjacency matrix and apply regularization if requested
         adj_matrix = nx.to_numpy_array(graph, dtype=np.float64)
+        if regularization_c is not None:
+            if regularization_c <= 0:
+                raise ValueError(f"Regularization parameter c must be positive, got {regularization_c}")
+            # Apply identity regularization: A + cI
+            adj_matrix = adj_matrix + regularization_c * np.eye(n, dtype=np.float64)
+            if self.verbose_oracle_calls:
+                print(f"   Applied regularization: c = {regularization_c}")
+        
         optimal_value = self.solve_quadratic_program(adj_matrix)
         
         # A value >= 0.5 implies a very large omega; cap at n
@@ -119,14 +130,15 @@ class Oracle(ABC):
         
         return omega_result
     
-    def __call__(self, graph: nx.Graph) -> int:
+    def __call__(self, graph: nx.Graph, regularization_c: Optional[float] = None) -> int:
         """
         Allow the oracle to be called directly as a function.
         
         Args:
             graph: A networkx graph.
+            regularization_c: Optional regularization parameter.
             
         Returns:
             The clique number omega(G).
         """
-        return self.get_omega(graph)
+        return self.get_omega(graph, regularization_c)

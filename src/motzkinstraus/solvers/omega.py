@@ -35,6 +35,13 @@ except ImportError:
     JAX_PGD_AVAILABLE = False
 
 try:
+    from ..oracles.jax_pgd_regularized import RegularizedJAXPGDOracle
+    JAX_PGD_REGULARIZED_AVAILABLE = True
+except ImportError:
+    RegularizedJAXPGDOracle = None
+    JAX_PGD_REGULARIZED_AVAILABLE = False
+
+try:
     from ..oracles.jax_mirror import MirrorDescentOracle
     JAX_MIRROR_AVAILABLE = True
 except ImportError:
@@ -117,6 +124,43 @@ class JAXPGDOmegaSolver(OmegaSolver):
     
     def is_available(self) -> bool:
         return JAX_PGD_AVAILABLE and self.oracle is not None and self.oracle.is_available
+
+
+class RegularizedJAXPGDOmegaSolver(OmegaSolver):
+    """Regularized JAX Projected Gradient Descent Oracle solver."""
+    
+    def __init__(self, config: Dict):
+        super().__init__("Regularized JAX PGD Oracle")
+        self.regularization_c = config.get('regularization_c', 0.5)
+        if not JAX_PGD_REGULARIZED_AVAILABLE:
+            self.oracle = None
+        else:
+            from ..oracles.regularized_base import IdentityRegularization
+            regularization_function = IdentityRegularization(c=self.regularization_c)
+            self.oracle = RegularizedJAXPGDOracle(
+                regularization_function=regularization_function,
+                learning_rate=config['learning_rate_pgd'],
+                max_iterations=config['max_iterations'],
+                num_restarts=config['num_restarts'],
+                tolerance=config['tolerance'],
+                verbose=config['verbose']
+            )
+    
+    def compute_omega(self, graph: nx.Graph) -> Tuple[int, float, bool, str]:
+        if not self.is_available():
+            return 0, 0.0, False, "Regularized JAX PGD Oracle not available"
+        
+        start_time = time.time()
+        try:
+            omega = self.oracle.get_omega(graph)
+            runtime = time.time() - start_time
+            return omega, runtime, True, f"Regularized with c={self.regularization_c}"
+        except Exception as e:
+            runtime = time.time() - start_time
+            return 0, runtime, False, str(e)
+    
+    def is_available(self) -> bool:
+        return JAX_PGD_REGULARIZED_AVAILABLE and self.oracle is not None and self.oracle.is_available
 
 
 class JAXMirrorOmegaSolver(OmegaSolver):
@@ -509,6 +553,9 @@ def create_omega_solvers(omega_solvers: List[str], omega_config: Dict) -> List[O
     
     if "jax_pgd" in omega_solvers:
         solvers.append(JAXPGDOmegaSolver(omega_config['jax_config']))
+    
+    if "jax_pgd_regularized" in omega_solvers:
+        solvers.append(RegularizedJAXPGDOmegaSolver(omega_config['jax_config']))
     
     if "jax_mirror" in omega_solvers:
         solvers.append(JAXMirrorOmegaSolver(omega_config['jax_config']))
