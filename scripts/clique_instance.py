@@ -28,7 +28,7 @@ Usage Examples:
     # Test with Dirac-3 oracle
     python scripts/clique_instance.py --test --oracle dirac --num-samples 100
     
-    # Compare different oracles
+    # Compare different oracles with color-coded visualization
     python scripts/clique_instance.py --test --compare-oracles --plot
     
     # Test Erdős-Rényi graphs with Dirac
@@ -37,8 +37,14 @@ Usage Examples:
     # JAX-PGD with custom parameters
     python scripts/clique_instance.py --test --oracle jax-pgd --num-restarts 100
     
-    # Dirac with custom configuration
-    python scripts/clique_instance.py --test --oracle dirac --num-samples 200 --relax-schedule 3
+    # Dirac with custom configuration and refinement disabled
+    python scripts/clique_instance.py --test --oracle dirac --num-samples 200 --disable-refinement
+    
+    # Enable refinement for better clique discovery (default behavior)
+    python scripts/clique_instance.py --test --oracle dirac --enable-refinement --verbose
+    
+    # Compare oracles on random graphs with refinement control
+    python scripts/clique_instance.py --erdos-test --compare-oracles --disable-refinement --plot
 
 Parameters:
     --test              Run tests on predefined graphs
@@ -72,6 +78,8 @@ Performance Considerations:
 - Dirac-3: Quantum annealing, good for finding global optima, requires QCI account
 - Threshold parameter affects precision vs recall trade-off for both oracles
 - Dense graphs are generally easier to solve than sparse graphs
+- Superposition refinement: Improves clique discovery but increases computational cost
+- Oracle comparison mode: Provides enhanced visualization with color-coded results
 """
 
 import sys

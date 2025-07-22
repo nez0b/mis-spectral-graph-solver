@@ -183,6 +183,43 @@ def adjacency_to_polynomial(adjacency_matrix: np.ndarray) -> Tuple[List[Tuple[in
     return poly_indices_tuple, poly_coefficients_array
 
 
+def matrix_to_polynomial(matrix: np.ndarray, scale_factor: float = 1.0) -> Tuple[List[Tuple[int, ...]], np.ndarray]:
+    """
+    Convert matrix to polynomial format for JAX optimization.
+    
+    For a general quadratic form x^T * M * x, this expands to: sum_{i,j} M[i,j] * x_i * x_j
+    
+    Args:
+        matrix: The matrix M.
+        scale_factor: Optional scaling factor (default 1.0, use 0.5 for Motzkin-Straus on adjacency matrices).
+        
+    Returns:
+        Tuple of (poly_indices, poly_coefficients) for the quadratic form.
+    """
+    n = matrix.shape[0]
+    poly_indices = []
+    poly_coefficients = []
+    
+    # Add quadratic terms: scale_factor * x^T * M * x = scale_factor * sum_{i,j} M[i,j] * x_i * x_j
+    for i in range(n):
+        for j in range(n):
+            if matrix[i, j] != 0:
+                if i == j:
+                    # Diagonal term: scale_factor * M[i,i] * x_i^2
+                    poly_indices.append((i + 1, i + 1))  # 1-based indexing
+                    poly_coefficients.append(scale_factor * matrix[i, j])
+                else:
+                    # Off-diagonal term: scale_factor * M[i,j] * x_i * x_j
+                    poly_indices.append((i + 1, j + 1))  # 1-based indexing  
+                    poly_coefficients.append(scale_factor * matrix[i, j])
+    
+    # Convert to tuple format for JAX static args
+    poly_indices_tuple = tuple(tuple(indices) for indices in poly_indices)
+    poly_coefficients_array = jnp.array(poly_coefficients)
+    
+    return poly_indices_tuple, poly_coefficients_array
+
+
 def run_projected_gradient_descent(
     poly_indices: Tuple[Tuple[int, ...], ...],
     poly_coefficients: jnp.ndarray,

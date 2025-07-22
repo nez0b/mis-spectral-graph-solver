@@ -74,17 +74,100 @@ def find_maximal_cliques_motzkin_straus(graph, num_restarts=50, ...):
     return unique_maximal_cliques
 ```
 
+## Superposition Refinement and Local Search Methods
+
+### Overview
+When oracle solutions represent superposition states (multiple cliques encoded in a single solution vector), the algorithm employs sophisticated refinement strategies to extract individual maximal cliques. This is particularly important for quantum annealing solvers like Dirac-3, which may produce solutions that are not pure clique states.
+
+### Greedy Clique Peeling Algorithm
+
+The core refinement method is "Greedy Clique Peeling", which iteratively extracts cliques from superposition solutions:
+
+```python
+def refine_superposition_solution(graph, solution_vector, support_indices):
+    """
+    Extract multiple cliques from a superposition solution using greedy peeling.
+    
+    Algorithm:
+    1. Sort support vertices by solution values (highest first)
+    2. For each vertex v in sorted order:
+        a. Find all neighbors of v within current support
+        b. Form candidate clique with v and its supported neighbors
+        c. Verify clique property and extract if valid
+        d. Remove extracted vertices from support
+        e. Continue until support is exhausted
+    
+    This approach leverages the insight that higher solution values often
+    correspond to vertices that participate in larger or more stable cliques.
+    """
+```
+
+### Refinement Control Options
+
+The system provides fine-grained control over superposition refinement:
+
+#### CLI Flags
+- **`--enable-refinement`** (default): Enable superposition solution refinement
+- **`--disable-refinement`**: Skip refinement to improve performance on pure solutions
+
+#### Performance Considerations
+- **Refinement Enabled**: More comprehensive clique discovery, higher computational cost
+- **Refinement Disabled**: Faster execution, may miss cliques in superposition solutions
+- **Automatic Skip**: Refinement is automatically skipped for trivial supports (single vertex)
+
+### Oracle-Specific Refinement Behavior
+
+#### JAX-PGD Oracle
+- Pure solutions are common due to local optimization nature
+- Refinement helps when gradient descent converges to superposition states
+- Multiple restarts naturally provide solution diversity
+
+#### Dirac-3 Oracle  
+- Superposition solutions are more common due to quantum nature
+- Refinement is crucial for extracting multiple cliques from quantum superposition
+- Energy-based solution ranking helps prioritize better refinement candidates
+
+### Refinement Integration
+
+The refinement process is seamlessly integrated into both oracle adapters:
+
+```python
+# In oracle adapter find_maximal_cliques() method
+if verify_clique(graph, candidate_clique):
+    # Pure solution - use directly
+    if verify_maximal_clique(graph, candidate_clique):
+        maximal_cliques.add(candidate_clique)
+else:
+    # Superposition solution - attempt refinement if enabled
+    if self.enable_refinement and len(support_indices) > 1:
+        refined_cliques = self.refine_superposition_solution(
+            graph, solution_vector, support_indices
+        )
+        for refined_clique in refined_cliques:
+            if verify_maximal_clique(graph, refined_clique):
+                maximal_cliques.add(refined_clique)
+    else:
+        # Skip refinement - log reason (disabled vs trivial)
+        refinement_status = "disabled" if not self.enable_refinement else "trivial support"
+        print(f"Skipping refinement ({refinement_status})")
+```
+
 ### Support Functions
 
 - **`extract_support()`**: Finds indices where solution values exceed threshold
 - **`verify_maximal_clique()`**: Checks if clique cannot be extended by adding vertices
+- **`refine_superposition_solution()`**: Applies "Greedy Clique Peeling" to extract multiple cliques from superposition solutions
 - **`plot_clique_instances()`**: Creates network visualizations with colored clique highlighting
+- **`plot_oracle_comparison_results()`**: Enhanced plotting with oracle-specific color coding (blue=JAX-PGD, red=Dirac)
 - **`analyze_clique_coverage()`**: Compares found cliques against NetworkX ground truth
 
 ### CLI Interface
 Comprehensive command-line interface supporting:
 - Predefined graph testing (`--test`)
 - Erdős-Rényi random graph testing (`--erdos-test`)
+- Multiple oracle solvers (`--oracle jax-pgd/dirac`)
+- Oracle comparison mode (`--compare-oracles`)
+- Superposition refinement control (`--enable-refinement`/`--disable-refinement`)
 - Visualization generation (`--plot`)
 - Performance comparison (`--compare-networkx`)
 - Customizable parameters (restarts, thresholds, etc.)
@@ -147,6 +230,21 @@ python scripts/clique_instance.py --erdos-test --nodes 10 --compare-networkx --p
 python scripts/clique_instance.py --test --num-restarts 100 --threshold 1e-6 --verbose
 ```
 
+### Oracle Comparison and Refinement Control
+```bash
+# Compare different oracles with color-coded visualization
+python scripts/clique_instance.py --test --compare-oracles --plot
+
+# Test with refinement disabled for performance
+python scripts/clique_instance.py --test --oracle dirac --disable-refinement
+
+# Enable refinement explicitly (default behavior)
+python scripts/clique_instance.py --test --oracle dirac --enable-refinement --verbose
+
+# Compare oracles on Erdős-Rényi graphs
+python scripts/clique_instance.py --erdos-test --nodes 10 --compare-oracles --plot
+```
+
 ### Advanced Usage
 ```bash
 # Performance testing on larger graphs
@@ -154,6 +252,9 @@ python scripts/clique_instance.py --erdos-test --nodes 20 --compare-networkx
 
 # Save plots to custom directory
 python scripts/clique_instance.py --test --plot --save-plots ./my_plots/
+
+# Dirac oracle with custom configuration and disabled refinement  
+python scripts/clique_instance.py --test --oracle dirac --num-samples 200 --disable-refinement
 ```
 
 ## Future Improvements
