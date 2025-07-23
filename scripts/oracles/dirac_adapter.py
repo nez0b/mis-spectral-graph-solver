@@ -105,7 +105,8 @@ class DiracConfig(OracleConfig):
 class DiracAdapter(OracleAdapter):
     """Oracle adapter for Dirac-3 quantum annealing solver."""
     
-    def __init__(self, config: DiracConfig, verbose: bool = False, enable_refinement: bool = True):
+    def __init__(self, config: DiracConfig, verbose: bool = False, enable_refinement: bool = False):
+        # Note: Refinement is disabled by default as requested - Dirac should find optimal solutions directly
         super().__init__(config, verbose, enable_refinement)
         # Store optimization details for analysis
         self.last_job_response: Optional[Dict[str, Any]] = None
@@ -144,45 +145,286 @@ class DiracAdapter(OracleAdapter):
         except Exception as e:
             raise RuntimeError(f"Failed to connect to QCI services: {e}")
     
-    def _graph_to_qplib_data(self, graph: nx.Graph) -> Dict[str, Any]:
+    def construct_gibbons_matrix(self, graph: nx.Graph, weights: Dict[int, float]) -> Tuple[np.ndarray, List[int]]:
         """
-        Convert NetworkX graph to QPLIB data format.
+        Construct the Gibbons B matrix for the weighted Motzkin-Straus theorem.
+        
+        For a weighted MAXIMUM CLIQUE problem on graph G, the Gibbons matrix B is:
+        - B[i,i] = 1/w[i] (diagonal elements)  
+        - B[i,j] = 0 for ADJACENT vertices (they can both be in the clique)
+        - B[i,j] = (1/w[i] + 1/w[j])/2 for NON-ADJACENT vertices (constraint violation)
+        
+        The optimization problem is: min{x^T B x | e^T x = 1, x ≥ 0}
         
         Args:
-            graph: NetworkX graph
+            graph: NetworkX graph (original graph for max weight clique)
+            weights: Dictionary mapping node IDs to weights
+            
+        Returns:
+            Tuple of (B_matrix, node_list) where B_matrix is the Gibbons matrix
+        """
+        node_list = list(graph.nodes())
+        n = len(node_list)
+        
+        if n == 0:
+            return np.array([]), []
+        
+        # Initialize B matrix
+        B = np.zeros((n, n), dtype=np.float64)
+        
+        # Set diagonal elements: B[i,i] = 1/w[i]
+        for i, node in enumerate(node_list):
+            weight = weights.get(node, 1.0)
+            if weight <= 0:
+                raise ValueError(f"Weight for node {node} must be positive, got {weight}")
+            B[i, i] = 1.0 / weight
+        
+        # Set off-diagonal elements according to Gibbons' Theorem 5 for MAX CLIQUE:
+        # B[i,j] = 0 for ADJACENT vertices (both can be selected in clique)
+        # B[i,j] = (1/w[i] + 1/w[j])/2 for NON-ADJACENT vertices (constraint)
+        
+        for i, node_i in enumerate(node_list):
+            for j, node_j in enumerate(node_list):
+                if i != j:
+                    if graph.has_edge(node_i, node_j):
+                        # Adjacent vertices: both can be in clique, no constraint
+                        B[i, j] = 0.0
+                    else:
+                        # Non-adjacent vertices: cannot both be in clique, add constraint
+                        weight_i = weights.get(node_i, 1.0)
+                        weight_j = weights.get(node_j, 1.0)
+                        B[i, j] = (1.0/weight_i + 1.0/weight_j) / 2.0
+        
+        return B, node_list
+
+    def _graph_to_qplib_data(self, graph: nx.Graph, weights: Dict[int, float]) -> Dict[str, Any]:
+        """
+        Convert NetworkX graph to QPLIB data format using Gibbons B matrix.
+        
+        Args:
+            graph: NetworkX graph (original graph for max weight clique)
+            weights: Dictionary mapping node IDs to weights
             
         Returns:
             QPLIB data dictionary with poly_indices, poly_coefficients, sum_constraint
         """
-        # Get adjacency matrix
-        node_list = list(graph.nodes())
-        adj_matrix = nx.to_numpy_array(graph, nodelist=node_list)
-        n = adj_matrix.shape[0]
+        # Construct Gibbons B matrix
+        B_matrix, node_list = self.construct_gibbons_matrix(graph, weights)
+        n = B_matrix.shape[0]
+        
+        # Debug: Save B matrix and graph info for inspection
+        if self.verbose:
+            self._save_matrix_debug_info(B_matrix, node_list, graph, weights)
+        
+        if n == 0:
+            return {
+                'poly_indices': [],
+                'poly_coefficients': [],
+                'sum_constraint': self.config.sum_constraint
+            }
         
         poly_indices = []
         poly_coefficients = []
         
-        # Add quadratic terms: 0.5 * x^T * A * x = 0.5 * sum_{i,j} A[i,j] * x_i * x_j
+        # Add quadratic terms: x^T * B * x = sum_{i,j} B[i,j] * x_i * x_j
         # Process upper triangular part to ensure ascending indices for QCI API compliance
-        # Since adjacency matrix is symmetric: A[i,j] = A[j,i], we can process only upper triangle
         for i in range(n):
             for j in range(i, n):  # j starts from i to ensure i <= j
-                if adj_matrix[i, j] != 0:
+                if B_matrix[i, j] != 0:
                     if i == j:
-                        # Diagonal term: 0.5 * A[i,i] * x_i^2
+                        # Diagonal term: B[i,i] * x_i^2
                         poly_indices.append([i + 1, i + 1])  # 1-based indexing
-                        poly_coefficients.append(0.5 * adj_matrix[i, j])
+                        poly_coefficients.append(B_matrix[i, j])
                     else:
-                        # Off-diagonal term: A[i,j] * x_i * x_j 
-                        # Full coefficient since we're only counting each unique pair once
+                        # Off-diagonal term: B[i,j] * x_i * x_j + B[j,i] * x_j * x_i = 2 * B[i,j] * x_i * x_j
+                        # Since B is symmetric, we double the coefficient for off-diagonal terms
                         poly_indices.append([i + 1, j + 1])  # Guaranteed i+1 <= j+1
-                        poly_coefficients.append(adj_matrix[i, j])
+                        poly_coefficients.append(2.0 * B_matrix[i, j])
         
         return {
             'poly_indices': poly_indices,
             'poly_coefficients': poly_coefficients,
             'sum_constraint': self.config.sum_constraint
         }
+    
+    def _save_matrix_debug_info(self, B_matrix: np.ndarray, node_list: List[int], 
+                               graph: nx.Graph, weights: Dict[int, float]) -> None:
+        """
+        Save B matrix and related information for debugging.
+        
+        Args:
+            B_matrix: The Gibbons B matrix
+            node_list: List of node IDs
+            graph: Original graph
+            weights: Vertex weights
+        """
+        import json
+        import time
+        from pathlib import Path
+        
+        try:
+            # Create debug directory
+            debug_dir = Path("debug")
+            debug_dir.mkdir(exist_ok=True)
+            
+            # Generate timestamp
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            
+            # Calculate theoretical optimal for complete graphs
+            if graph.number_of_edges() == graph.number_of_nodes() * (graph.number_of_nodes() - 1) // 2:
+                # Complete graph - optimal clique is all vertices
+                total_weight = sum(weights.values())
+                theoretical_optimal = 1.0 / total_weight
+                graph_type = "complete"
+            else:
+                theoretical_optimal = "unknown"
+                graph_type = "general"
+            
+            debug_info = {
+                "timestamp": timestamp,
+                "graph_info": {
+                    "nodes": list(graph.nodes()),
+                    "edges": list(graph.edges()),
+                    "num_nodes": graph.number_of_nodes(),
+                    "num_edges": graph.number_of_edges(),
+                    "graph_type": graph_type
+                },
+                "weights": weights,
+                "node_list": node_list,
+                "B_matrix": B_matrix.tolist(),
+                "B_matrix_shape": B_matrix.shape,
+                "theoretical_optimal": theoretical_optimal,
+                "config": self.config.to_dict()
+            }
+            
+            # Save to JSON file
+            filename = debug_dir / f"dirac_matrix_debug_{timestamp}.json"
+            with open(filename, 'w') as f:
+                json.dump(debug_info, f, indent=2)
+            
+            print(f"Debug: Saved B matrix debug info to {filename}")
+            print(f"Debug: Graph type: {graph_type}, nodes: {graph.number_of_nodes()}, edges: {graph.number_of_edges()}")
+            print(f"Debug: B matrix diagonal: {np.diag(B_matrix)}")
+            if theoretical_optimal != "unknown":
+                print(f"Debug: Theoretical optimal objective: {theoretical_optimal:.6f}")
+            
+        except Exception as e:
+            print(f"Warning: Failed to save matrix debug info: {e}")
+    
+    def _validate_energy_values(self, best_energy: float, all_energies: List[float], 
+                               graph: nx.Graph, weights: Dict[int, float]) -> None:
+        """
+        Validate energy values against theoretical expectations.
+        
+        Args:
+            best_energy: Best (lowest) energy from Dirac solver
+            all_energies: All energy values from solutions
+            graph: Original graph
+            weights: Vertex weights
+        """
+        if self.verbose:
+            print(f"Energy Validation:")
+            print(f"  Best energy: {best_energy:.8f}")
+            print(f"  Energy std dev: {np.std(all_energies):.8f}")
+            
+            # For complete graphs, we can calculate the theoretical optimum
+            if graph.number_of_edges() == graph.number_of_nodes() * (graph.number_of_nodes() - 1) // 2:
+                total_weight = sum(weights.values())
+                theoretical_optimal = 1.0 / total_weight
+                
+                print(f"  Theoretical optimal (complete graph): {theoretical_optimal:.8f}")
+                print(f"  Energy vs theoretical: {abs(best_energy - theoretical_optimal):.8f}")
+                
+                # Check if energy is close to theoretical
+                if abs(best_energy - theoretical_optimal) < 0.01:
+                    print(f"  ✓ Energy matches theoretical expectation!")
+                else:
+                    print(f"  ⚠ Energy differs significantly from theoretical!")
+                    
+            else:
+                print(f"  Note: General graph - no theoretical optimum calculated")
+            
+            # Check for negative energies (could indicate coefficient negation issues)
+            if best_energy < 0:
+                print(f"  ⚠ WARNING: Negative energy detected - possible coefficient negation issue!")
+            
+            # Check energy range
+            energy_range = max(all_energies) - min(all_energies)
+            print(f"  Energy range: {energy_range:.8f}")
+    
+    def _qplib_to_polynomial_file_gibbons(self, qplib_data: Dict[str, Any], file_name: str) -> Dict[str, Any]:
+        """
+        Transform QPLIB data to QCI polynomial file format for Gibbons minimization problems.
+        
+        CRITICAL: Unlike the standard qplib_to_polynomial_file, this function does NOT negate
+        coefficients because Gibbons' weighted Motzkin-Straus theorem is already a MINIMIZATION
+        problem: min{x^T B x | e^T x = 1, x ≥ 0}
+        
+        Args:
+            qplib_data: QPLIB data dictionary with Gibbons B matrix coefficients
+            file_name: Name for the polynomial file
+            
+        Returns:
+            QCI polynomial file configuration dictionary with original coefficients
+            
+        Raises:
+            ValueError: If QPLIB data is invalid
+        """
+        from collections import Counter
+        
+        try:
+            poly_indices = qplib_data['poly_indices']
+            poly_coefficients = qplib_data['poly_coefficients']
+            
+            if len(poly_indices) != len(poly_coefficients):
+                raise ValueError("poly_indices and poly_coefficients must have same length")
+            
+            # Calculate number of variables and degrees
+            all_indices = np.array(poly_indices).flatten()
+            if len(all_indices) == 0:
+                raise ValueError("Empty polynomial data")
+            
+            ind_dict = Counter(all_indices.tolist())
+            num_vars = int(max(all_indices)) if len(all_indices) > 0 else 0
+            max_degree = len(poly_indices[0]) if len(poly_indices) > 0 else 2
+            min_degree = max_degree
+            
+            if self.verbose:
+                print(f"Gibbons polynomial: {num_vars} variables, degree {min_degree}-{max_degree}")
+                print(f"Coefficient range: [{min(poly_coefficients):.6f}, {max(poly_coefficients):.6f}]")
+            
+            # Transform to QCI format WITHOUT negating coefficients (Gibbons is already minimization)
+            data = []
+            for idx, val in zip(poly_indices, poly_coefficients):
+                # Convert indices to native Python ints and coefficients to native Python floats
+                if isinstance(idx, (list, tuple)):
+                    idx_converted = [int(i) for i in idx]
+                else:
+                    idx_converted = int(idx)
+                
+                val_converted = float(val)  # NO NEGATION for Gibbons minimization
+                data.append({"idx": idx_converted, "val": val_converted})
+            
+            # Create QCI polynomial file configuration
+            file_config = {
+                "file_name": file_name,
+                "file_config": {
+                    "polynomial": {
+                        "num_variables": int(num_vars),
+                        "min_degree": int(min_degree),
+                        "max_degree": int(max_degree),
+                        "data": data
+                    }
+                }
+            }
+            
+            if self.verbose:
+                print(f"✅ Created Gibbons QCI polynomial file config with {len(data)} terms (NO negation)")
+            
+            return file_config
+            
+        except Exception as e:
+            raise ValueError(f"Failed to convert QPLIB data to polynomial file: {e}")
     
     def _extract_cliques_from_dirac_response(
         self, 
@@ -199,9 +441,9 @@ class DiracAdapter(OracleAdapter):
             support_threshold: Threshold for support extraction
             
         Returns:
-            List of maximal cliques found
+            List of valid cliques found
         """
-        maximal_cliques = set()  # Use set of frozensets for deduplication
+        found_cliques = set()  # Use set of frozensets for deduplication
         node_list = list(graph.nodes())
         
         for i, solution_vector in enumerate(solutions):
@@ -227,75 +469,56 @@ class DiracAdapter(OracleAdapter):
             
             # Verify it's actually a clique
             if self.verify_clique(graph, candidate_clique):
-                # Pure solution: check if it's maximal
-                if self.verify_maximal_clique(graph, candidate_clique):
-                    # Add to results (using frozenset for hashing/deduplication)
-                    clique_frozen = frozenset(candidate_clique)
-                    if clique_frozen not in maximal_cliques:
-                        maximal_cliques.add(clique_frozen)
-                        if self.verbose:
-                            print(f"  Found maximal clique: {sorted(candidate_clique)}")
-                else:
+                # Add all valid cliques (not just maximal ones) for maximum weight clique problems
+                clique_frozen = frozenset(candidate_clique)
+                if clique_frozen not in found_cliques:
+                    found_cliques.add(clique_frozen)
                     if self.verbose:
-                        print(f"  Valid clique but not maximal - skipping")
+                        is_maximal = self.verify_maximal_clique(graph, candidate_clique)
+                        maximal_status = "maximal" if is_maximal else "non-maximal"
+                        print(f"  Found valid clique ({maximal_status}): {sorted(candidate_clique)}")
             else:
-                # Superposition solution: attempt refinement if enabled
-                support_indices = self.extract_support(solution_vector, support_threshold)
-                if self.enable_refinement and len(support_indices) > 1:  # Only refine non-trivial supports
-                    if self.verbose:
-                        print(f"  Not a valid clique - attempting superposition refinement")
-                    
-                    try:
-                        refined_cliques = self.refine_superposition_solution(
-                            graph, solution_vector, support_indices
-                        )
-                        
-                        for refined_clique in refined_cliques:
-                            # Verify refined clique is maximal
-                            if self.verify_maximal_clique(graph, refined_clique):
-                                clique_frozen = frozenset(refined_clique)
-                                if clique_frozen not in maximal_cliques:
-                                    maximal_cliques.add(clique_frozen)
-                                    if self.verbose:
-                                        print(f"  Refined to maximal clique: {sorted(refined_clique)}")
-                        
-                        if self.verbose:
-                            print(f"  Refinement yielded {len(refined_cliques)} cliques")
-                            
-                    except Exception as e:
-                        if self.verbose:
-                            print(f"  Refinement failed: {e}")
-                else:
-                    if self.verbose:
-                        refinement_status = "disabled" if not self.enable_refinement else "trivial support"
-                        print(f"  Not a valid clique - skipping refinement ({refinement_status})")
+                # Invalid clique - Dirac should find optimal solutions directly without refinement
+                if self.verbose:
+                    print(f"  Not a valid clique - skipping (refinement disabled, Dirac should find optimal solutions)")
+                    print(f"  Candidate was: {sorted(candidate_clique)} (size: {len(candidate_clique)})")
         
-        return [set(clique) for clique in maximal_cliques]
+        return [set(clique) for clique in found_cliques]
     
     def find_maximal_cliques(
         self, 
         graph: nx.Graph, 
-        support_threshold: float = 1e-5
+        support_threshold: float = 1e-5,
+        weights: Optional[Dict[int, float]] = None
     ) -> List[Set[int]]:
         """
-        Find maximal cliques using Dirac-3 quantum annealing.
+        Find cliques using Dirac-3 quantum annealing with weighted Motzkin-Straus formulation.
+        
+        Note: Returns ALL valid cliques found (both maximal and non-maximal) since for 
+        maximum weight clique problems, a smaller clique might have higher total weight.
         
         Args:
-            graph: NetworkX graph to analyze
+            graph: NetworkX graph to analyze (complement graph for MWIS)
             support_threshold: Threshold for extracting support from solutions
+            weights: Dictionary mapping node IDs to weights (default: uniform weights of 1.0)
             
         Returns:
-            List of sets, each containing vertices of a maximal clique
+            List of sets, each containing vertices of a valid clique
         """
         if graph.number_of_nodes() == 0:
             return []
         
+        # Default to uniform weights if not provided
+        if weights is None:
+            weights = {node: 1.0 for node in graph.nodes()}
+        
         if self.verbose:
             print(f"Dirac: Finding maximal cliques in graph with {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
             print(f"Dirac: Using {self.config.num_samples} samples with schedule {self.config.relaxation_schedule}")
+            print(f"Dirac: Using weighted Gibbons B matrix formulation with {len(weights)} weighted nodes")
         
-        # Convert graph to QPLIB format
-        qplib_data = self._graph_to_qplib_data(graph)
+        # Convert graph to QPLIB format using Gibbons B matrix
+        qplib_data = self._graph_to_qplib_data(graph, weights)
         
         if not qplib_data['poly_indices']:
             if self.verbose:
@@ -304,7 +527,7 @@ class DiracAdapter(OracleAdapter):
         
         # Transform to QCI polynomial file format
         file_name = f"clique_graph_{graph.number_of_nodes()}n_{graph.number_of_edges()}e"
-        polynomial_file = qplib_to_polynomial_file(qplib_data, file_name)
+        polynomial_file = self._qplib_to_polynomial_file_gibbons(qplib_data, file_name)
         
         # Submit job to Dirac-3
         job_name = f"clique_finder_{int(time.time())}"
@@ -338,6 +561,9 @@ class DiracAdapter(OracleAdapter):
             solutions = results.get('solutions', [])
             self.last_solutions = [np.array(sol) for sol in solutions]
             
+            # Validate energy values before support extraction
+            self._validate_energy_values(best_energy, all_energies, graph, weights)
+            
             if self.verbose:
                 print(f"Dirac: Best energy: {best_energy:.6f}")
                 print(f"Dirac: Theoretical omega: {self.last_omega:.3f}")
@@ -345,14 +571,14 @@ class DiracAdapter(OracleAdapter):
                 print(f"Dirac: Energy range: [{min(all_energies):.6f}, {max(all_energies):.6f}]")
             
             # Extract cliques from all solution vectors
-            maximal_cliques = self._extract_cliques_from_dirac_response(
+            found_cliques = self._extract_cliques_from_dirac_response(
                 graph, self.last_solutions, support_threshold
             )
             
             if self.verbose:
-                print(f"Dirac: Found {len(maximal_cliques)} unique maximal cliques")
+                print(f"Dirac: Found {len(found_cliques)} unique valid cliques")
             
-            return maximal_cliques
+            return found_cliques
             
         except Exception as e:
             if self.verbose:

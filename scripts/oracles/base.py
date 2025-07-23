@@ -57,7 +57,8 @@ class OracleAdapter(ABC):
     def find_maximal_cliques(
         self, 
         graph: nx.Graph,
-        support_threshold: float = 1e-5
+        support_threshold: float = 1e-5,
+        weights: Optional[Dict[int, float]] = None
     ) -> List[Set[int]]:
         """
         Find maximal cliques in the given graph.
@@ -65,6 +66,7 @@ class OracleAdapter(ABC):
         Args:
             graph: NetworkX graph to analyze
             support_threshold: Threshold for extracting support from solutions
+            weights: Optional dictionary mapping node IDs to weights (for weighted problems)
             
         Returns:
             List of sets, each containing vertices of a maximal clique
