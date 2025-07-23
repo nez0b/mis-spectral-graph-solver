@@ -18,6 +18,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from .base import OracleAdapter, OracleConfig
 
+# Import refinement methods from parent directory
+sys.path.insert(0, os.path.dirname(__file__))
+try:
+    from clique_instance import refine_solution_vector
+except ImportError:
+    # Fallback for direct execution
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from clique_instance import refine_solution_vector
+
 # Try to import QCI client and related functions
 try:
     import qci_client as qc
@@ -163,11 +172,16 @@ class DiracAdapter(OracleAdapter):
         Returns:
             Tuple of (B_matrix, node_list) where B_matrix is the Gibbons matrix
         """
-        node_list = list(graph.nodes())
-        n = len(node_list)
+        # Filter out nodes with non-positive weights (common in column generation)
+        valid_nodes = [node for node in graph.nodes() if weights.get(node, 1.0) > 0]
         
-        if n == 0:
+        if len(valid_nodes) == 0:
             return np.array([]), []
+        
+        # Create subgraph with only positively-weighted nodes
+        subgraph = graph.subgraph(valid_nodes)
+        node_list = list(subgraph.nodes())
+        n = len(node_list)
         
         # Initialize B matrix
         B = np.zeros((n, n), dtype=np.float64)
@@ -175,8 +189,6 @@ class DiracAdapter(OracleAdapter):
         # Set diagonal elements: B[i,i] = 1/w[i]
         for i, node in enumerate(node_list):
             weight = weights.get(node, 1.0)
-            if weight <= 0:
-                raise ValueError(f"Weight for node {node} must be positive, got {weight}")
             B[i, i] = 1.0 / weight
         
         # Set off-diagonal elements according to Gibbons' Theorem 5 for MAX CLIQUE:
@@ -186,7 +198,7 @@ class DiracAdapter(OracleAdapter):
         for i, node_i in enumerate(node_list):
             for j, node_j in enumerate(node_list):
                 if i != j:
-                    if graph.has_edge(node_i, node_j):
+                    if subgraph.has_edge(node_i, node_j):
                         # Adjacent vertices: both can be in clique, no constraint
                         B[i, j] = 0.0
                     else:
@@ -690,7 +702,7 @@ class DiracAdapter(OracleAdapter):
             if self.verbose:
                 print(f"  Candidate clique: {sorted(candidate_clique)} (size: {len(candidate_clique)})")
             
-            # Verify it's actually a clique
+            # First check if the candidate is already valid
             if self.verify_clique(graph, candidate_clique):
                 # Add all valid cliques (not just maximal ones) for maximum weight clique problems
                 clique_frozen = frozenset(candidate_clique)
@@ -701,10 +713,41 @@ class DiracAdapter(OracleAdapter):
                         maximal_status = "maximal" if is_maximal else "non-maximal"
                         print(f"  Found valid clique ({maximal_status}): {sorted(candidate_clique)}")
             else:
-                # Invalid clique - Dirac should find optimal solutions directly without refinement
+                # Invalid clique - attempt refinement to extract valid solutions
                 if self.verbose:
-                    print(f"  Not a valid clique - skipping (refinement disabled, Dirac should find optimal solutions)")
-                    print(f"  Candidate was: {sorted(candidate_clique)} (size: {len(candidate_clique)})")
+                    print(f"  Candidate not valid clique: {sorted(candidate_clique)} - attempting refinement")
+                
+                try:
+                    # Use solution refinement to extract valid cliques from the raw solution
+                    refined_cliques = refine_solution_vector(
+                        solution_vector=solution_vector,
+                        graph=graph,
+                        weights=weights,
+                        threshold=support_threshold,
+                        max_exact_size=20,
+                        debug=self.verbose
+                    )
+                    
+                    # Add all refined cliques to results
+                    for refined_clique in refined_cliques:
+                        clique_frozen = frozenset(refined_clique)
+                        if clique_frozen not in found_cliques:
+                            found_cliques.add(clique_frozen)
+                            if self.verbose:
+                                is_maximal = self.verify_maximal_clique(graph, refined_clique)
+                                maximal_status = "maximal" if is_maximal else "non-maximal"
+                                print(f"  Refined to valid clique ({maximal_status}): {sorted(refined_clique)}")
+                    
+                    if self.verbose:
+                        if refined_cliques:
+                            print(f"  Refinement succeeded: extracted {len(refined_cliques)} valid cliques")
+                        else:
+                            print(f"  Refinement failed: no valid cliques found")
+                            
+                except Exception as e:
+                    if self.verbose:
+                        print(f"  Refinement failed with error: {e}")
+                        print(f"  Falling back to skipping candidate: {sorted(candidate_clique)}")
         
         return [set(clique) for clique in found_cliques]
     

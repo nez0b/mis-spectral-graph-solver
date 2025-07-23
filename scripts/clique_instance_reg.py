@@ -1,56 +1,64 @@
 #!/usr/bin/env python3
 """
-Maximal Clique Finder using Motzkin-Straus Theorem with Multiple Oracle Solvers
+Regularized Clique Finder using Regularized Motzkin-Straus Theorem with Multiple Oracle Solvers
 
 Theory: 
-- The Motzkin-Straus theorem connects the maximum of a quadratic function over the simplex 
-  to the clique number of a graph.
-- The support of the optimal solution (global maximum) corresponds to vertices of a maximum clique.
-- Local maxima correspond to maximal cliques - cliques that cannot be extended by adding vertices.
-- Different oracle solvers can explore the optimization landscape in different ways.
+- Uses the regularized Motzkin-Straus theorem: max_{x ∈ Δ} x^T (A + cI) x
+- Standard formulation: x^T A x → Regularized formulation: x^T (A + cI) x  
+- Regularization eliminates spurious solutions (non-clique local optima)
+- Ensures one-to-one correspondence between optima and cliques
+- Makes optimization landscape strictly concave for more robust convergence
+- Focuses on efficiently generating large cliques (not necessarily maximal or optimal)
 
 Implementation:
+- Apply identity regularization A → A + cI before optimization
 - Support multiple oracle solvers: JAX-PGD (local optimization) and Dirac-3 (quantum annealing)
 - Extract support from solution vectors (indices where x_i > threshold)
 - Verify each support forms a valid clique
-- Check maximality (cannot be extended)
-- Return collection of unique maximal cliques
+- Return collection of unique cliques with enhanced convergence properties
 
 Oracle Solvers:
 - JAX-PGD: Projected Gradient Descent with multiple restarts for local optimization
 - Dirac-3: Quantum annealing solver via QCI cloud service
 
+Regularization Benefits:
+- Eliminates spurious solutions and improves convergence to true cliques
+- Parameter c controls regularization strength (default: 0.1)
+- c=0 reduces to standard Motzkin-Straus formulation
+- Larger c values provide stronger regularization but may affect clique size
+
 Usage Examples:
 
-    # Test with JAX-PGD oracle (default)
-    python scripts/clique_instance.py --test --oracle jax-pgd --compare-networkx
+    # Test with regularized JAX-PGD oracle (default c=0.1)
+    python scripts/clique_instance_reg.py --test --oracle jax-pgd --compare-networkx
     
-    # Test with Dirac-3 oracle
-    python scripts/clique_instance.py --test --oracle dirac --num-samples 100
+    # Test with custom regularization parameter
+    python scripts/clique_instance_reg.py --test --regularization-c 0.5
     
-    # Compare different oracles with color-coded visualization
-    python scripts/clique_instance.py --test --compare-oracles --plot
+    # Test with Dirac-3 oracle and strong regularization
+    python scripts/clique_instance_reg.py --test --oracle dirac --regularization-c 1.0 --num-samples 100
     
-    # Test Erdős-Rényi graphs with Dirac
-    python scripts/clique_instance.py --erdos-test --nodes 10 --oracle dirac
+    # Compare different oracles with regularization
+    python scripts/clique_instance_reg.py --test --compare-oracles --regularization-c 0.3 --plot
     
-    # JAX-PGD with custom parameters
-    python scripts/clique_instance.py --test --oracle jax-pgd --num-restarts 100
+    # Test Erdős-Rényi graphs with regularized Dirac
+    python scripts/clique_instance_reg.py --erdos-test --nodes 10 --oracle dirac --regularization-c 0.2
     
-    # Dirac with custom configuration and refinement disabled
-    python scripts/clique_instance.py --test --oracle dirac --num-samples 200 --disable-refinement
+    # JAX-PGD with custom regularization and parameters
+    python scripts/clique_instance_reg.py --test --oracle jax-pgd --regularization-c 0.8 --num-restarts 100
     
-    # Enable refinement for better clique discovery (default behavior)
-    python scripts/clique_instance.py --test --oracle dirac --enable-refinement --verbose
+    # No regularization (standard Motzkin-Straus)
+    python scripts/clique_instance_reg.py --test --regularization-c 0.0
     
-    # Compare oracles on random graphs with refinement control
-    python scripts/clique_instance.py --erdos-test --compare-oracles --disable-refinement --plot
+    # Strong regularization for difficult graphs
+    python scripts/clique_instance_reg.py --erdos-test --regularization-c 2.0 --oracle dirac --plot
 
 Parameters:
     --test              Run tests on predefined graphs
     --erdos-test        Test on Erdős-Rényi random graphs
     --oracle TYPE       Oracle solver: 'jax-pgd' or 'dirac' (default: jax-pgd)
     --compare-oracles   Compare multiple oracles on same graphs
+    --regularization-c C Regularization parameter for A → A + cI (default: 0.1)
     --threshold T       Support extraction threshold (default: 1e-5)
     --verbose          Enable detailed progress output
     --plot             Generate visualization plots
@@ -73,9 +81,14 @@ Superposition Refinement Options:
     --enable-refinement   Enable local search refinement of superposition solutions (default)
     --disable-refinement  Disable refinement to improve performance
 
+Regularization Options:
+    --regularization-c C  Regularization parameter for identity regularization (default: 0.1)
+
 Performance Considerations:
+- Regularization improves convergence reliability and eliminates spurious solutions
 - JAX-PGD: Larger graphs require more restarts, local optimization approach
-- Dirac-3: Quantum annealing, good for finding global optima, requires QCI account
+- Dirac-3: Quantum annealing, good for finding global optima, requires QCI account  
+- Regularization parameter c: Higher values provide stronger regularization
 - Threshold parameter affects precision vs recall trade-off for both oracles
 - Dense graphs are generally easier to solve than sparse graphs
 - Superposition refinement: Improves clique discovery but increases computational cost
@@ -107,7 +120,11 @@ try:
     print("Successfully imported oracle system")
 except ImportError as e:
     print(f"Error importing oracle system: {e}")
-    print("Oracle system not available - falling back to legacy JAX-PGD implementation")
+    print("Oracle system not available - falling back to legacy implementations")
+    OracleFactory = None
+except Exception as e:
+    print(f"Oracle system failed to load: {e}")
+    print("Oracle system not available - falling back to legacy implementations")
     OracleFactory = None
 
 # Try to import matplotlib for plotting
@@ -119,6 +136,37 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
     print("Matplotlib not available - plotting disabled")
+
+# Import regularization functions from regularized_graph_to_omega.py
+try:
+    # Add scripts directory to path for importing regularization functions
+    scripts_dir = os.path.dirname(__file__)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    
+    from regularized_graph_to_omega import (
+        apply_identity_regularization, 
+        validate_regularization_parameter,
+        qplib_to_polynomial_file
+    )
+    print("Successfully imported regularization functions")
+    REGULARIZATION_AVAILABLE = True
+except ImportError as e:
+    print(f"Error importing regularization functions: {e}")
+    print("Regularization functionality not available - falling back to standard Motzkin-Straus")
+    REGULARIZATION_AVAILABLE = False
+
+# Import DIMACS to QPLIB conversion and Dirac submission functions
+try:
+    from dimacs_to_qplib import dimacs_to_qplib
+    from graph_to_omega import submit_to_dirac, extract_best_energy, energy_to_omega
+    from regularized_graph_to_omega import regularized_energy_to_omega
+    print("Successfully imported DIMACS to QPLIB and Dirac submission functions")
+    DIRAC_SUBMISSION_AVAILABLE = True
+except ImportError as e:
+    print(f"Error importing Dirac submission functions: {e}")
+    print("Dirac submission functionality not available")
+    DIRAC_SUBMISSION_AVAILABLE = False
 
 
 def extract_support(solution_vector: np.ndarray, threshold: float = 1e-5) -> Set[int]:
@@ -176,370 +224,21 @@ def verify_maximal_clique(graph: nx.Graph, candidate_clique: Set[int]) -> bool:
     return True
 
 
-def refine_solution_vector(
-    solution_vector: np.ndarray,
-    graph: nx.Graph,
-    weights: Optional[Dict[int, float]] = None,
-    threshold: float = 1e-5,
-    max_exact_size: int = 20,
-    debug: bool = False
-) -> List[Set[int]]:
-    """
-    Refine raw oracle solution into valid cliques/independent sets.
-    
-    This function takes a continuous solution vector from an oracle (Dirac/JAX-PGD)
-    and extracts valid discrete solutions (cliques or independent sets) using
-    multiple refinement strategies.
-    
-    Args:
-        solution_vector: Raw solution from oracle (continuous values)
-        graph: Graph to check validity against (original for cliques, complement for IS)
-        weights: Optional node weights for weighted problems (e.g., dual values)
-        threshold: Support extraction threshold for candidate nodes
-        max_exact_size: Maximum candidate set size for exact enumeration
-        debug: Enable detailed refinement logging
-        
-    Returns:
-        List of valid maximal cliques/independent sets extracted from solution
-    """
-    if len(solution_vector) == 0:
-        return []
-    
-    # Extract candidate nodes from solution vector
-    candidates = set()
-    node_list = list(graph.nodes())
-    
-    for i, value in enumerate(solution_vector):
-        if i < len(node_list) and value > threshold:
-            candidates.add(node_list[i])
-    
-    if not candidates:
-        if debug:
-            print(f"  Refinement: No candidates above threshold {threshold}")
-        return []
-    
-    # Default to uniform weights if not provided
-    if weights is None:
-        weights = {node: 1.0 for node in graph.nodes()}
-    
-    if debug:
-        print(f"  Refinement: Starting with {len(candidates)} candidates")
-        print(f"  Candidates: {sorted(candidates)}")
-        candidate_weights = [weights.get(node, 0.0) for node in sorted(candidates)]
-        print(f"  Candidate weights: {candidate_weights}")
-    
-    found_solutions = set()  # Use set of frozensets for deduplication
-    
-    # Strategy 1: Exact enumeration for small candidate sets
-    if len(candidates) <= max_exact_size:
-        if debug:
-            print(f"  Using exact enumeration (candidates <= {max_exact_size})")
-        exact_solutions = _refine_exact_enumeration(candidates, graph, weights, debug)
-        found_solutions.update(exact_solutions)
-    
-    # Strategy 2: Greedy peeling (always run as fallback)
-    if debug:
-        print(f"  Using greedy peeling strategy")
-    peeling_solution = _refine_greedy_peeling(candidates, graph, weights, debug)
-    if peeling_solution:
-        found_solutions.add(frozenset(peeling_solution))
-    
-    # Strategy 3: Greedy building (alternative approach)
-    if debug:
-        print(f"  Using greedy building strategy")
-    building_solution = _refine_greedy_building(candidates, graph, weights, debug)
-    if building_solution:
-        found_solutions.add(frozenset(building_solution))
-    
-    # Post-process: Ensure all solutions are maximal
-    maximal_solutions = _extend_to_maximal(found_solutions, graph, weights, debug)
-    
-    result = [set(solution) for solution in maximal_solutions]
-    
-    if debug:
-        print(f"  Refinement complete: {len(result)} unique maximal solutions found")
-        for i, sol in enumerate(sorted(result, key=lambda x: (len(x), sorted(x)))):
-            sol_weight = sum(weights.get(node, 0.0) for node in sol)
-            print(f"    Solution {i+1}: {sorted(sol)} (size: {len(sol)}, weight: {sol_weight:.3f})")
-    
-    return result
-
-
-def _refine_exact_enumeration(
-    candidates: Set[int],
-    graph: nx.Graph,
-    weights: Dict[int, float],
-    debug: bool = False
-) -> Set[frozenset[int]]:
-    """
-    Exact enumeration strategy: check all non-empty subsets of candidates.
-    
-    Args:
-        candidates: Set of candidate nodes from support extraction
-        graph: Graph to validate solutions against
-        weights: Node weights (unused in this strategy but kept for consistency)
-        debug: Enable debug output
-        
-    Returns:
-        Set of frozensets representing all maximal valid solutions
-    """
-    from itertools import combinations
-    
-    valid_solutions = set()
-    candidates_list = list(candidates)
-    
-    if debug:
-        print(f"    Exact enumeration: checking {2**len(candidates_list) - 1} subsets")
-    
-    # Check all non-empty subsets
-    for size in range(1, len(candidates_list) + 1):
-        for subset in combinations(candidates_list, size):
-            subset_set = set(subset)
-            
-            # Check if subset forms valid clique/independent set
-            if _is_valid_solution(subset_set, graph):
-                # Check if it's maximal among the candidates
-                is_maximal = True
-                for node in candidates - subset_set:
-                    extended = subset_set | {node}
-                    if _is_valid_solution(extended, graph):
-                        is_maximal = False
-                        break
-                
-                if is_maximal:
-                    valid_solutions.add(frozenset(subset_set))
-                    if debug:
-                        print(f"      Found maximal solution: {sorted(subset_set)}")
-    
-    if debug:
-        print(f"    Exact enumeration found {len(valid_solutions)} solutions")
-    
-    return valid_solutions
-
-
-def _refine_greedy_peeling(
-    candidates: Set[int],
-    graph: nx.Graph,
-    weights: Dict[int, float],
-    debug: bool = False
-) -> Optional[Set[int]]:
-    """
-    Greedy peeling strategy: start with all candidates, remove problematic nodes.
-    
-    Args:
-        candidates: Set of candidate nodes
-        graph: Graph to validate against
-        weights: Node weights for conflict resolution
-        debug: Enable debug output
-        
-    Returns:
-        Valid solution set or None if no solution found
-    """
-    working_set = candidates.copy()
-    
-    if debug:
-        print(f"    Greedy peeling: starting with {len(working_set)} nodes")
-    
-    iteration = 0
-    while working_set and not _is_valid_solution(working_set, graph):
-        iteration += 1
-        if iteration > len(candidates):  # Safety limit
-            if debug:
-                print(f"    Greedy peeling: iteration limit reached")
-            break
-        
-        # Find node that causes most conflicts (or least weight if tied)
-        conflict_scores = {}
-        for node in working_set:
-            conflicts = 0
-            for other in working_set:
-                if node != other:
-                    # For cliques: conflict if no edge; for IS: conflict if edge exists
-                    if not graph.has_edge(node, other):
-                        conflicts += 1
-            
-            # Use negative weight as tie-breaker (remove lower weight nodes first)
-            conflict_scores[node] = (conflicts, -weights.get(node, 0.0))
-        
-        # Remove node with highest conflict score
-        worst_node = max(conflict_scores, key=conflict_scores.get)
-        working_set.remove(worst_node)
-        
-        if debug:
-            conflicts, neg_weight = conflict_scores[worst_node]
-            print(f"      Iteration {iteration}: removed node {worst_node} "
-                  f"(conflicts: {conflicts}, weight: {-neg_weight:.3f})")
-    
-    if working_set and _is_valid_solution(working_set, graph):
-        if debug:
-            print(f"    Greedy peeling succeeded: {sorted(working_set)}")
-        return working_set
-    else:
-        if debug:
-            print(f"    Greedy peeling failed to find valid solution")
-        return None
-
-
-def _refine_greedy_building(
-    candidates: Set[int],
-    graph: nx.Graph,
-    weights: Dict[int, float],
-    debug: bool = False
-) -> Optional[Set[int]]:
-    """
-    Greedy building strategy: start empty, add highest-weight compatible nodes.
-    
-    Args:
-        candidates: Set of candidate nodes
-        graph: Graph to validate against
-        weights: Node weights for selection priority
-        debug: Enable debug output
-        
-    Returns:
-        Valid solution set or None if no solution found
-    """
-    solution = set()
-    remaining = candidates.copy()
-    
-    if debug:
-        print(f"    Greedy building: starting with {len(remaining)} candidates")
-    
-    while remaining:
-        # Find highest-weight node that's compatible with current solution
-        compatible_nodes = []
-        for node in remaining:
-            test_solution = solution | {node}
-            if _is_valid_solution(test_solution, graph):
-                compatible_nodes.append(node)
-        
-        if not compatible_nodes:
-            break  # No more nodes can be added
-        
-        # Select highest-weight compatible node
-        best_node = max(compatible_nodes, key=lambda n: weights.get(n, 0.0))
-        solution.add(best_node)
-        remaining.remove(best_node)
-        
-        if debug:
-            print(f"      Added node {best_node} (weight: {weights.get(best_node, 0.0):.3f})")
-    
-    if solution:
-        if debug:
-            print(f"    Greedy building succeeded: {sorted(solution)}")
-        return solution
-    else:
-        if debug:
-            print(f"    Greedy building failed (no valid starting node)")
-        return None
-
-
-def _extend_to_maximal(
-    solutions: Set[frozenset[int]],
-    graph: nx.Graph,
-    weights: Dict[int, float],
-    debug: bool = False
-) -> Set[frozenset[int]]:
-    """
-    Extend solutions to maximal and filter out non-maximal ones.
-    
-    Args:
-        solutions: Set of valid solutions to extend
-        graph: Graph for validation
-        weights: Node weights for extension priority
-        debug: Enable debug output
-        
-    Returns:
-        Set of maximal solutions
-    """
-    maximal_solutions = set()
-    all_nodes = set(graph.nodes())
-    
-    for solution_frozen in solutions:
-        solution = set(solution_frozen)
-        
-        # Try to extend solution greedily
-        while True:
-            # Find nodes that can extend the solution
-            candidates = []
-            for node in all_nodes - solution:
-                extended = solution | {node}
-                if _is_valid_solution(extended, graph):
-                    candidates.append(node)
-            
-            if not candidates:
-                break  # Cannot extend further
-            
-            # Add highest-weight candidate
-            best_candidate = max(candidates, key=lambda n: weights.get(n, 0.0))
-            solution.add(best_candidate)
-            
-            if debug:
-                print(f"      Extended solution with node {best_candidate}")
-        
-        # Check if this maximal solution is already subsumed by another
-        is_subsumed = False
-        for existing in list(maximal_solutions):
-            if solution.issubset(set(existing)):
-                is_subsumed = True
-                break
-            elif set(existing).issubset(solution):
-                # Current solution subsumes existing one
-                maximal_solutions.remove(existing)
-        
-        if not is_subsumed:
-            maximal_solutions.add(frozenset(solution))
-    
-    return maximal_solutions
-
-
-def _is_valid_solution(nodes: Set[int], graph: nx.Graph) -> bool:
-    """
-    Check if a set of nodes forms a valid clique or independent set.
-    
-    For cliques: all pairs must be connected
-    For independent sets: no pairs can be connected
-    
-    Args:
-        nodes: Set of nodes to check
-        graph: Graph to validate against
-        
-    Returns:
-        True if nodes form valid clique/independent set in graph
-    """
-    if not nodes:
-        return True
-    
-    if len(nodes) == 1:
-        return True
-    
-    # Check all pairs
-    nodes_list = list(nodes)
-    for i in range(len(nodes_list)):
-        for j in range(i + 1, len(nodes_list)):
-            node1, node2 = nodes_list[i], nodes_list[j]
-            
-            # For cliques: must have edge; for independent sets: must not have edge
-            # The caller determines which by passing appropriate graph
-            if not graph.has_edge(node1, node2):
-                return False
-    
-    return True
-
-
 def find_maximal_cliques_motzkin_straus(
     graph: nx.Graph,
     oracle_type: str = 'jax-pgd',
     support_threshold: float = 1e-5,
     verbose: bool = False,
     enable_refinement: bool = True,
+    regularization_c: float = 0.1,
     **oracle_config
 ) -> Tuple[List[Set[int]], Dict[str, Any]]:
     """
-    Find maximal cliques using the Motzkin-Straus theorem with configurable oracle solvers.
+    Find cliques using the regularized Motzkin-Straus theorem with configurable oracle solvers.
     
-    This function supports multiple oracle solvers to find local maxima of the 
-    Motzkin-Straus quadratic program. Each local maximum potentially corresponds 
-    to a maximal clique.
+    This function applies identity regularization (A → A + cI) to the adjacency matrix
+    before optimization, which eliminates spurious solutions and ensures better 
+    convergence to true cliques. Each local maximum corresponds to a clique.
     
     Args:
         graph: Input NetworkX graph
@@ -547,29 +246,62 @@ def find_maximal_cliques_motzkin_straus(
         support_threshold: Threshold for extracting support from solution vectors
         verbose: Whether to print detailed progress
         enable_refinement: Whether to enable superposition refinement (default: True)
+        regularization_c: Regularization parameter for A → A + cI (default: 0.1)
         **oracle_config: Oracle-specific configuration parameters
         
     Returns:
-        Tuple of (maximal_cliques, optimization_details) where:
-        - maximal_cliques: List of sets, each containing vertices of a maximal clique
+        Tuple of (cliques, optimization_details) where:
+        - cliques: List of sets, each containing vertices of a clique
         - optimization_details: Dictionary with oracle-specific optimization information
     """
     if graph.number_of_nodes() == 0:
         return [], {"message": "Empty graph"}
     
+    # Validate and apply regularization parameter
+    try:
+        if REGULARIZATION_AVAILABLE:
+            regularization_c = validate_regularization_parameter(regularization_c)
+        if verbose and regularization_c != 0.0:
+            print(f"🔧 Applying regularization: A → A + {regularization_c}I")
+        elif verbose and regularization_c == 0.0:
+            print("🔧 No regularization applied (c = 0.0, standard Motzkin-Straus)")
+    except Exception as e:
+        if verbose:
+            print(f"Warning: Regularization parameter validation failed: {e}")
+        print("Using default regularization_c = 0.1")
+        regularization_c = 0.1
+    
     # Use oracle system if available, otherwise fallback to legacy implementation
     if OracleFactory is None:
         if verbose:
             print("Oracle system not available - using legacy JAX-PGD implementation")
-        return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, **oracle_config)
+        return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, regularization_c, **oracle_config)
     
-    # Create oracle adapter
+    # Create oracle adapter or use regularized implementations
     try:
+        # Handle regularized cases with custom implementations
+        if regularization_c != 0.0:
+            if oracle_type == 'dirac':
+                if DIRAC_SUBMISSION_AVAILABLE:
+                    if verbose:
+                        print("🔄 Using regularized Dirac implementation for regularization support")
+                    return _regularized_dirac_implementation(graph, support_threshold, verbose, regularization_c, **oracle_config)
+                else:
+                    if verbose:
+                        print("⚠️  Dirac submission not available, falling back to regularized JAX-PGD")
+                    return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, regularization_c, **oracle_config)
+            else:
+                # oracle_type is 'jax-pgd' or other - use JAX-PGD implementation
+                if verbose:
+                    print("🔄 Using regularized JAX-PGD implementation for regularization support")
+                return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, regularization_c, **oracle_config)
+        
+        # Use standard oracle system for c=0 (no regularization)
         oracle = OracleFactory.create_oracle(oracle_type, verbose=verbose, enable_refinement=enable_refinement, **oracle_config)
         
         if verbose:
-            print(f"Using {oracle.name} oracle")
-            print(f"Finding maximal cliques in graph with {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
+            print(f"Using {oracle.name} oracle (no regularization)")
+            print(f"Finding cliques in graph with {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
         
         # Find maximal cliques using the oracle
         maximal_cliques = oracle.find_maximal_cliques(graph, support_threshold)
@@ -578,21 +310,703 @@ def find_maximal_cliques_motzkin_straus(
         optimization_details = oracle.get_optimization_details()
         
         if verbose:
-            print(f"Found {len(maximal_cliques)} unique maximal cliques")
+            print(f"Found {len(maximal_cliques)} unique cliques")
         
         return maximal_cliques, optimization_details
         
     except Exception as e:
         if verbose:
             print(f"Oracle {oracle_type} failed: {e}")
-            print("Falling back to legacy JAX-PGD implementation")
-        return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, **oracle_config)
+            print("Falling back to regularized JAX-PGD implementation")
+        return _legacy_jax_pgd_implementation(graph, support_threshold, verbose, regularization_c, **oracle_config)
+
+
+def _graph_to_qplib_standard(graph: nx.Graph) -> Dict[str, Any]:
+    """
+    Convert NetworkX graph to QPLIB format using standard adjacency matrix approach.
+    
+    This function converts the graph to the standard Motzkin-Straus QPLIB format
+    where each edge (i,j) becomes a polynomial term with coefficient 1.0.
+    This is different from the Gibbons matrix approach used in the oracle system.
+    
+    IMPORTANT: Ensures node indices are contiguous starting from 0 for QCI compatibility.
+    
+    Args:
+        graph: NetworkX graph to convert
+        
+    Returns:
+        QPLIB data dictionary with poly_indices, poly_coefficients, sum_constraint
+    """
+    if graph.number_of_nodes() == 0:
+        return {
+            "poly_indices": [],
+            "poly_coefficients": [],
+            "sum_constraint": 1
+        }
+    
+    # Create mapping from original node IDs to contiguous 0-based indices
+    # This is critical for QCI API which expects 0-based contiguous indexing
+    node_list = sorted(graph.nodes())
+    node_to_index = {node: idx for idx, node in enumerate(node_list)}
+    
+    # Convert edges to polynomial format with remapped indices
+    poly_indices = []
+    poly_coefficients = []
+    
+    # For each edge, add it as a polynomial term with coefficient 1.0
+    for u, v in graph.edges():
+        # Map to 0-based contiguous indices, then convert to 1-based for QCI API
+        u_idx = node_to_index[u] + 1  # Convert to 1-indexed for QCI compatibility
+        v_idx = node_to_index[v] + 1  # Convert to 1-indexed for QCI compatibility
+        
+        # Ensure consistent ordering for undirected edges
+        if u_idx <= v_idx:
+            poly_indices.append([u_idx, v_idx])
+            poly_coefficients.append(1.0)
+        else:
+            poly_indices.append([v_idx, u_idx])
+            poly_coefficients.append(1.0)
+    
+    # Include self-loops if present (diagonal terms)
+    for node in graph.nodes():
+        if graph.has_edge(node, node):
+            node_idx = node_to_index[node] + 1  # Convert to 1-indexed for QCI compatibility
+            poly_indices.append([node_idx, node_idx])
+            poly_coefficients.append(1.0)
+    
+    return {
+        "poly_indices": poly_indices,
+        "poly_coefficients": poly_coefficients,
+        "sum_constraint": 1
+    }
+
+
+def _qplib_to_polynomial_file_fixed_degrees(qplib_data: Dict[str, Any], file_name: str = "regularized_qplib_optimization", verbose: bool = False) -> Dict[str, Any]:
+    """
+    Transform regularized QPLIB data to QCI polynomial file format with proper degree handling.
+    
+    This is a fixed version of qplib_to_polynomial_file that correctly handles mixed degrees
+    (both degree 1 and degree 2 terms) by calculating min/max degrees properly.
+    
+    CRITICAL: This function converts a MAXIMIZATION problem (regularized Motzkin-Straus) to 
+    MINIMIZATION format (Dirac solver) by negating all coefficients.
+    
+    Args:
+        qplib_data: Regularized QPLIB data dictionary with positive coefficients
+        file_name: Name for the polynomial file
+        
+    Returns:
+        QCI polynomial file configuration dictionary with negated coefficients
+        
+    Raises:
+        ValueError: If QPLIB data is invalid
+    """
+    from collections import Counter
+    
+    try:
+        poly_indices = qplib_data['poly_indices']
+        poly_coefficients = qplib_data['poly_coefficients']
+        
+        if len(poly_indices) != len(poly_coefficients):
+            raise ValueError("poly_indices and poly_coefficients must have same length")
+        
+        # Calculate number of variables and degrees properly
+        all_indices = np.array(poly_indices).flatten()
+        if len(all_indices) == 0:
+            raise ValueError("Empty polynomial data")
+        
+        ind_dict = Counter(all_indices.tolist())
+        num_vars = int(max(all_indices)) if len(all_indices) > 0 else 0
+        
+        # Calculate min and max degrees correctly by examining each term
+        degrees = []
+        for idx in poly_indices:
+            if isinstance(idx, (list, tuple)):
+                # Degree is the LENGTH of the index list, not unique indices
+                # [0, 0] has degree 2 (x_0^2), [0, 1] has degree 2 (x_0 * x_1)
+                degrees.append(len(idx))
+            else:
+                # Single index means degree 1
+                degrees.append(1)
+        
+        min_degree = min(degrees) if degrees else 2
+        max_degree = max(degrees) if degrees else 2
+        
+        if verbose:
+            print(f"Polynomial structure: {num_vars} variables, degree {min_degree}-{max_degree}")
+            print(f"Term degrees: {Counter(degrees)}")
+        
+        # Transform to QCI format: [{"idx": [i,j], "val": coefficient}]
+        # Ensure all values are native Python types (not numpy types)
+        data = []
+        for idx, val in zip(poly_indices, poly_coefficients):
+            # Convert indices to native Python ints and coefficients to native Python floats
+            if isinstance(idx, (list, tuple)):
+                idx_converted = [int(i) for i in idx]
+            else:
+                idx_converted = int(idx)
+            
+            val_converted = -float(val)  # Negate for maximization->minimization conversion
+            data.append({"idx": idx_converted, "val": val_converted})
+        
+        # Create QCI polynomial file configuration
+        file_config = {
+            "file_name": file_name,
+            "file_config": {
+                "polynomial": {
+                    "num_variables": int(num_vars),
+                    "min_degree": int(min_degree),
+                    "max_degree": int(max_degree),
+                    "data": data
+                }
+            }
+        }
+        
+        if verbose:
+            print(f"Created QCI polynomial file config with {len(data)} terms (degrees {min_degree}-{max_degree})")
+        
+        return file_config
+        
+    except Exception as e:
+        raise ValueError(f"Failed to convert QPLIB data to polynomial file: {e}")
+
+
+def debug_reconstruct_matrix(qplib_data: Dict[str, Any], graph: nx.Graph = None, title: str = "Matrix") -> np.ndarray:
+    """
+    Reconstruct full matrix from QPLIB polynomial data for debugging.
+    
+    This function converts the polynomial representation back to matrix form
+    to verify that the objective matrix is constructed correctly.
+    
+    Args:
+        qplib_data: QPLIB data with poly_indices and poly_coefficients
+        graph: Optional original graph for validation
+        title: Title for debugging output
+        
+    Returns:
+        Reconstructed matrix as numpy array
+    """
+    poly_indices = qplib_data['poly_indices']
+    poly_coefficients = qplib_data['poly_coefficients']
+    
+    if not poly_indices:
+        print(f"❌ {title}: No polynomial terms found")
+        return np.array([])
+    
+    # Find matrix dimensions
+    all_indices = np.array(poly_indices).flatten()
+    max_index = int(max(all_indices))
+    min_index = int(min(all_indices))
+    
+    # Handle 1-indexed variables: if min_index is 1, we have 1-indexed variables
+    if min_index == 1:
+        # 1-indexed variables: matrix size is max_index, indices range [1, max_index]
+        n = max_index
+        index_offset = 1
+    else:
+        # 0-indexed variables: matrix size is max_index + 1, indices range [0, max_index]  
+        n = max_index + 1
+        index_offset = 0
+    
+    # Initialize matrix
+    matrix = np.zeros((n, n))
+    
+    # Fill matrix from polynomial terms
+    for indices, coeff in zip(poly_indices, poly_coefficients):
+        if len(indices) == 2:
+            # Convert from QPLIB indices to matrix indices
+            i, j = int(indices[0]) - index_offset, int(indices[1]) - index_offset
+            
+            # Ensure indices are within bounds
+            if 0 <= i < n and 0 <= j < n:
+                if i == j:
+                    # Diagonal term
+                    matrix[i, j] = coeff
+                else:
+                    # Off-diagonal term (symmetric for undirected graph)
+                    matrix[i, j] = coeff
+                    matrix[j, i] = coeff
+    
+    print(f"\n🔍 {title} Reconstruction:")
+    print(f"   Dimensions: {n}x{n}")
+    print(f"   Polynomial terms: {len(poly_indices)}")
+    print(f"   Matrix:\n{matrix}")
+    
+    # Check symmetry for undirected graphs
+    is_symmetric = np.allclose(matrix, matrix.T)
+    print(f"   Symmetric: {is_symmetric}")
+    
+    # Check diagonal values
+    diagonal = np.diag(matrix)
+    print(f"   Diagonal: {diagonal}")
+    
+    # If graph provided, validate structure
+    if graph is not None:
+        print(f"   Graph validation:")
+        print(f"     Original nodes: {sorted(graph.nodes())}")
+        print(f"     Original edges: {len(graph.edges())}")
+        
+        # Check that edges match
+        edge_count_matrix = 0
+        for i in range(n):
+            for j in range(i+1, n):  # Upper triangular
+                if matrix[i, j] != 0 and i != j:
+                    edge_count_matrix += 1
+        
+        print(f"     Matrix edges: {edge_count_matrix}")
+        print(f"     Edge count match: {edge_count_matrix == graph.number_of_edges()}")
+    
+    return matrix
+
+
+def debug_inspect_solutions(
+    solution_vectors: List[np.ndarray], 
+    graph: nx.Graph, 
+    threshold: float = 1e-5,
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Detailed analysis of Dirac solution vectors for debugging.
+    
+    Args:
+        solution_vectors: List of solution vectors from Dirac
+        graph: Original graph for clique verification
+        threshold: Support extraction threshold
+        verbose: Whether to print detailed output
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    if verbose:
+        print(f"\n🔍 Solution Vector Analysis:")
+        print(f"   Number of solutions: {len(solution_vectors)}")
+        print(f"   Support threshold: {threshold}")
+    
+    analysis = {
+        "num_solutions": len(solution_vectors),
+        "threshold": threshold,
+        "solutions_analysis": [],
+        "valid_cliques": [],
+        "threshold_sensitivity": {}
+    }
+    
+    # Create node mapping (matches _graph_to_qplib_standard)
+    original_node_list = sorted(graph.nodes())
+    index_to_node = {idx: node for idx, node in enumerate(original_node_list)}
+    
+    for i, solution_vector in enumerate(solution_vectors):
+        sol_analysis = {
+            "index": i,
+            "vector": solution_vector.tolist(),
+            "sum": float(np.sum(solution_vector)),
+            "max": float(np.max(solution_vector)),
+            "min": float(np.min(solution_vector)),
+            "std": float(np.std(solution_vector))
+        }
+        
+        if verbose and i < 5:  # Show details for first 5 solutions
+            print(f"\n   Solution {i+1}:")
+            print(f"     Vector: {solution_vector}")
+            print(f"     Sum: {sol_analysis['sum']:.6f}")
+            print(f"     Max: {sol_analysis['max']:.6f}")
+            print(f"     Non-zero entries: {np.sum(solution_vector > 1e-10)}")
+        
+        # Extract support with current threshold
+        support_indices = extract_support(solution_vector, threshold)
+        candidate_clique = {index_to_node[idx + 1] for idx in support_indices if (idx + 1) in index_to_node}
+        
+        sol_analysis["support_indices"] = list(support_indices)
+        sol_analysis["candidate_clique"] = list(candidate_clique)
+        sol_analysis["candidate_size"] = len(candidate_clique)
+        
+        if verbose and i < 5:
+            print(f"     Support indices: {list(support_indices)}")
+            print(f"     Candidate clique: {sorted(candidate_clique)} (size: {len(candidate_clique)})")
+        
+        # Verify if it's a valid clique
+        is_valid_clique = verify_clique(graph, candidate_clique) if candidate_clique else False
+        sol_analysis["is_valid_clique"] = is_valid_clique
+        
+        if is_valid_clique:
+            analysis["valid_cliques"].append(candidate_clique)
+            if verbose and i < 5:
+                print(f"     ✅ Valid clique!")
+        elif verbose and i < 5:
+            print(f"     ❌ Not a valid clique")
+            
+            # Debug why it's not a clique
+            if candidate_clique:
+                missing_edges = []
+                nodes = list(candidate_clique)
+                for u_idx, u in enumerate(nodes):
+                    for v_idx, v in enumerate(nodes[u_idx+1:], u_idx+1):
+                        if not graph.has_edge(u, v):
+                            missing_edges.append((u, v))
+                
+                if missing_edges:
+                    print(f"     Missing edges: {missing_edges[:3]}{'...' if len(missing_edges) > 3 else ''}")
+        
+        analysis["solutions_analysis"].append(sol_analysis)
+    
+    # Test different thresholds for sensitivity analysis
+    test_thresholds = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+    
+    if verbose:
+        print(f"\n   Threshold Sensitivity Analysis:")
+    
+    for test_thresh in test_thresholds:
+        valid_cliques_at_thresh = set()
+        support_sizes = []
+        
+        for solution_vector in solution_vectors:
+            support_indices = extract_support(solution_vector, test_thresh)
+            support_sizes.append(len(support_indices))
+            
+            if support_indices:
+                candidate_clique = {index_to_node[idx + 1] for idx in support_indices if (idx + 1) in index_to_node}
+                if verify_clique(graph, candidate_clique):
+                    valid_cliques_at_thresh.add(frozenset(candidate_clique))
+        
+        avg_support_size = np.mean(support_sizes) if support_sizes else 0
+        
+        analysis["threshold_sensitivity"][test_thresh] = {
+            "avg_support_size": float(avg_support_size),
+            "valid_cliques": len(valid_cliques_at_thresh),
+            "unique_cliques": [set(clique) for clique in valid_cliques_at_thresh]
+        }
+        
+        if verbose:
+            marker = " <-- current" if abs(test_thresh - threshold) < 1e-9 else ""
+            print(f"     {test_thresh}: avg_support={avg_support_size:.1f}, valid_cliques={len(valid_cliques_at_thresh)}{marker}")
+    
+    return analysis
+
+
+def debug_test_small_cases():
+    """
+    Test known small cases with expected results.
+    
+    Tests triangle, K4, and path graphs to verify correctness.
+    """
+    print("\n🧪 Testing Small Cases with Expected Results")
+    print("=" * 60)
+    
+    test_cases = [
+        {
+            "name": "Triangle (K3)",
+            "graph": nx.complete_graph(3),
+            "expected_clique": {0, 1, 2},
+            "expected_clique_size": 3
+        },
+        {
+            "name": "Complete K4", 
+            "graph": nx.complete_graph(4),
+            "expected_clique": {0, 1, 2, 3},
+            "expected_clique_size": 4
+        },
+        {
+            "name": "Path P3",
+            "graph": nx.path_graph(3),
+            "expected_clique_size": 2  # Any pair of adjacent nodes
+        }
+    ]
+    
+    for case in test_cases:
+        print(f"\n🔍 Testing {case['name']}:")
+        graph = case["graph"]
+        
+        print(f"   Graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
+        print(f"   Edges: {list(graph.edges())}")
+        
+        # Test matrix construction
+        qplib_data = _graph_to_qplib_standard(graph)
+        print(f"   QPLIB terms: {len(qplib_data['poly_indices'])}")
+        
+        # Reconstruct and display adjacency matrix
+        adj_matrix = debug_reconstruct_matrix(qplib_data, graph, "Adjacency Matrix")
+        
+        # Test regularization
+        for c in [0.0, 0.1, 0.5]:
+            print(f"\n   Regularization c = {c}:")
+            
+            if c == 0.0:
+                reg_data = qplib_data
+            else:
+                reg_data = apply_identity_regularization_fixed(qplib_data, c)
+            
+            # Reconstruct regularized matrix
+            reg_matrix = debug_reconstruct_matrix(reg_data, graph, f"Regularized Matrix (c={c})")
+            
+            # Verify A + cI structure
+            if c > 0.0:
+                expected_diagonal = c
+                actual_diagonal = np.diag(reg_matrix)
+                print(f"   Expected diagonal: {expected_diagonal}")
+                print(f"   Actual diagonal: {actual_diagonal}")
+                print(f"   Diagonal correct: {np.allclose(actual_diagonal, expected_diagonal)}")
+
+
+def apply_identity_regularization_fixed(qplib_data: Dict[str, Any], c: float) -> Dict[str, Any]:
+    """
+    Apply identity regularization to QPLIB data: A → A + cI.
+    
+    FIXED VERSION: Handles 0-indexed variables correctly (unlike the original 1-indexed version).
+    
+    This transforms the Motzkin-Straus objective from x^T A x to x^T (A + cI) x,
+    which eliminates spurious solutions and makes the optimization landscape
+    strictly concave.
+    
+    Args:
+        qplib_data: Original QPLIB data dictionary with 0-indexed variables
+        c: Regularization parameter (typically 0.1, 0.5, or 1.0)
+        
+    Returns:
+        Regularized QPLIB data with identity matrix added to adjacency matrix
+    """
+    # Special case: c = 0 means no regularization, return original data
+    if c == 0.0:
+        print(f"No regularization applied: c = 0.0 (standard Motzkin-Straus)")
+        return qplib_data
+    
+    # Extract original data
+    poly_indices = qplib_data['poly_indices']
+    poly_coefficients = qplib_data['poly_coefficients']
+    
+    # Find the number of variables (0-indexed)
+    all_indices = np.array(poly_indices).flatten()
+    if len(all_indices) == 0:
+        # No edges in graph, just return original data
+        print(f"WARNING: No edges found, regularization has no effect")
+        return qplib_data
+    
+    max_index = int(max(all_indices))
+    min_index = int(min(all_indices))
+    
+    # For 1-indexed variables, num_vars is just max_index (not max_index + 1)
+    if min_index == 1:
+        # Variables are 1-indexed: [1, 2, 3], so num_vars = max_index = 3
+        num_vars = max_index  
+    else:
+        # Variables are 0-indexed: [0, 1, 2], so num_vars = max_index + 1 = 3
+        num_vars = max_index + 1
+    
+    # Create regularized polynomial terms
+    regularized_indices = list(poly_indices)  # Copy original terms
+    regularized_coefficients = list(poly_coefficients)  # Copy original coefficients
+    
+    # Add diagonal terms for regularization: c * x_i^2 for each variable
+    diagonal_terms_added = 0
+    if min_index == 1:
+        # 1-indexed variables: add diagonal for variables 1, 2, 3, ..., num_vars
+        var_range = range(1, num_vars + 1)
+    else:
+        # 0-indexed variables: add diagonal for variables 0, 1, 2, ..., num_vars-1
+        var_range = range(0, num_vars)
+    
+    for i in var_range:
+        # Check if diagonal term already exists
+        diagonal_exists = any(
+            len(idx) == 2 and idx[0] == i and idx[1] == i 
+            for idx in poly_indices
+        )
+        
+        if diagonal_exists:
+            # Update existing diagonal term to c (replace, don't add)
+            # For regularized formulation A + cI, diagonal should be c, not 1.0 + c
+            for j, idx in enumerate(regularized_indices):
+                if len(idx) == 2 and idx[0] == i and idx[1] == i:
+                    regularized_coefficients[j] = c  # Set to c, not add c
+                    diagonal_terms_added += 1
+                    break
+        else:
+            # Add new diagonal term with coefficient c
+            regularized_indices.append([i, i])
+            regularized_coefficients.append(c)
+            diagonal_terms_added += 1
+    
+    # Create regularized QPLIB data
+    regularized_data = qplib_data.copy()
+    regularized_data['poly_indices'] = regularized_indices
+    regularized_data['poly_coefficients'] = regularized_coefficients
+    
+    print(f"Applied identity regularization: c = {c}")
+    print(f"   Added/updated {diagonal_terms_added} diagonal terms")
+    print(f"   Total polynomial terms: {len(regularized_indices)} (was {len(poly_indices)})")
+    
+    return regularized_data
+
+
+def _regularized_dirac_implementation(
+    graph: nx.Graph,
+    support_threshold: float = 1e-5,
+    verbose: bool = False,
+    regularization_c: float = 0.1,
+    num_samples: int = 100,
+    relaxation_schedule: int = 2,
+    solution_precision: Optional[float] = None,
+    job_timeout: int = 300,
+    **kwargs
+) -> Tuple[List[Set[int]], Dict[str, Any]]:
+    """
+    Regularized Dirac implementation using the approach from regularized_graph_to_omega.py.
+    
+    This function applies regularization A → A + cI at the QPLIB level and submits
+    to Dirac-3 using the proven workflow from regularized_graph_to_omega.py.
+    
+    Args:
+        graph: NetworkX graph to analyze
+        support_threshold: Threshold for extracting support from solutions
+        verbose: Whether to print detailed progress
+        regularization_c: Regularization parameter for A → A + cI
+        num_samples: Number of Dirac samples
+        relaxation_schedule: Relaxation schedule 1-4
+        solution_precision: Solution precision (optional)
+        job_timeout: Job timeout in seconds
+        **kwargs: Additional parameters (ignored)
+        
+    Returns:
+        Tuple of (cliques, optimization_details)
+    """
+    if not DIRAC_SUBMISSION_AVAILABLE:
+        raise RuntimeError("Dirac submission functions not available. Cannot use regularized Dirac implementation.")
+    
+    if verbose:
+        print(f"Regularized Dirac: Finding cliques with regularization c={regularization_c}")
+        print(f"Dirac parameters: samples={num_samples}, schedule={relaxation_schedule}")
+    
+    try:
+        # Step 1: Convert graph to standard QPLIB format
+        qplib_data = _graph_to_qplib_standard(graph)
+        
+        if not qplib_data['poly_indices']:
+            if verbose:
+                print("No polynomial terms - empty graph or no edges")
+            return [], {"message": "No edges"}
+        
+        # DEBUG: Show original adjacency matrix
+        if verbose:
+            print(f"\n🔍 Matrix Debugging:")
+            adj_matrix = debug_reconstruct_matrix(qplib_data, graph, "Original Adjacency Matrix")
+        
+        # Step 2: Apply regularization A → A + cI
+        if regularization_c != 0.0:
+            regularized_data = apply_identity_regularization_fixed(qplib_data, regularization_c)
+            if verbose:
+                print(f"✅ Applied identity regularization: A + {regularization_c}I")
+                # DEBUG: Show regularized matrix
+                reg_matrix = debug_reconstruct_matrix(regularized_data, graph, f"Regularized Matrix (c={regularization_c})")
+        else:
+            regularized_data = qplib_data
+            if verbose:
+                print("✅ No regularization applied (c = 0.0, standard Motzkin-Straus)")
+        
+        # Step 3: Transform to QCI polynomial file format (with coefficient negation)
+        file_name = f"clique_reg_c{regularization_c}_n{graph.number_of_nodes()}_{int(time.time())}"
+        polynomial_file = _qplib_to_polynomial_file_fixed_degrees(regularized_data, file_name, verbose)
+        
+        if verbose:
+            print(f"✅ Created QCI polynomial file with {len(regularized_data['poly_indices'])} terms")
+        
+        # Step 4: Submit to Dirac-3
+        job_name = f"clique_reg_c{regularization_c}_{int(time.time())}"
+        
+        job_response = submit_to_dirac(
+            polynomial_file=polynomial_file,
+            job_name=job_name,
+            num_samples=num_samples,
+            relaxation_schedule=relaxation_schedule,
+            solution_precision=solution_precision,
+            sum_constraint=1,  # Always 1 for Motzkin-Straus
+            wait=True,
+            job_tags=['regularized_clique', 'motzkin_straus']
+        )
+        
+        if verbose:
+            print(f"✅ Dirac job completed: {job_response.get('status', 'unknown')}")
+        
+        # Step 5: Extract energies and solutions
+        best_energy, all_energies, best_solution = extract_best_energy(job_response)
+        
+        # For regularized Motzkin-Straus, use the correct formula: ω = (1-2c)/(1 + 2*energy)
+        theoretical_omega = regularized_energy_to_omega(best_energy, regularization_c)
+        
+        # Extract all solution vectors
+        results = job_response.get('results', {})
+        solutions = results.get('solutions', [])
+        solution_vectors = [np.array(sol) for sol in solutions]
+        
+        if verbose:
+            print(f"✅ Best energy: {best_energy:.6f}, theoretical omega: {theoretical_omega:.3f}")
+            print(f"✅ Processing {len(solution_vectors)} solution vectors")
+        
+        # DEBUG: Detailed solution analysis
+        if verbose:
+            analysis = debug_inspect_solutions(solution_vectors, graph, support_threshold, verbose=True)
+        
+        # Step 6: Extract cliques from solution vectors
+        found_cliques = set()  # Use set of frozensets for deduplication
+        
+        # Create node mapping back to original IDs (matches _graph_to_qplib_standard)
+        # NOTE: QPLIB variables are 1-indexed, so we need to map 1-based indices to original nodes
+        original_node_list = sorted(graph.nodes())
+        index_to_node = {idx + 1: node for idx, node in enumerate(original_node_list)}
+        
+        for i, solution_vector in enumerate(solution_vectors):
+            if verbose and i < 3:  # Show details for first few solutions
+                print(f"  Solution {i+1}: sum={np.sum(solution_vector):.6f}, max={np.max(solution_vector):.6f}")
+            
+            # Extract support (candidate clique vertices)
+            support_indices = extract_support(solution_vector, support_threshold)
+            
+            if not support_indices:
+                continue
+            
+            # Map indices back to actual node IDs using the same mapping as graph conversion
+            # NOTE: support_indices are 0-indexed array positions, but QPLIB variables are 1-indexed
+            candidate_clique = {index_to_node[idx + 1] for idx in support_indices if (idx + 1) in index_to_node}
+            
+            if verbose and i < 3:
+                print(f"  Candidate clique: {sorted(candidate_clique)} (size: {len(candidate_clique)})")
+            
+            # Verify it's actually a clique
+            if verify_clique(graph, candidate_clique):
+                clique_frozen = frozenset(candidate_clique)
+                if clique_frozen not in found_cliques:
+                    found_cliques.add(clique_frozen)
+                    if verbose:
+                        print(f"  ✅ Found valid clique: {sorted(candidate_clique)}")
+        
+        result_cliques = [set(clique) for clique in found_cliques]
+        
+        # Prepare optimization details
+        details = {
+            "oracle_type": "regularized-dirac",
+            "regularization_c": regularization_c,
+            "num_samples": num_samples,
+            "relaxation_schedule": relaxation_schedule,
+            "best_energy": best_energy,
+            "theoretical_omega": theoretical_omega,
+            "solutions_processed": len(solution_vectors),
+            "unique_cliques_found": len(result_cliques),
+            "job_status": job_response.get('status', 'unknown')
+        }
+        
+        if verbose:
+            print(f"✅ Regularized Dirac completed: found {len(result_cliques)} unique cliques")
+        
+        return result_cliques, details
+        
+    except Exception as e:
+        if verbose:
+            print(f"❌ Regularized Dirac implementation failed: {e}")
+        raise RuntimeError(f"Regularized Dirac optimization failed: {e}")
 
 
 def _legacy_jax_pgd_implementation(
     graph: nx.Graph, 
     support_threshold: float = 1e-5, 
     verbose: bool = False,
+    regularization_c: float = 0.1,
     num_restarts: int = 50,
     learning_rate: float = 0.01,
     max_iterations: int = 2000,
@@ -600,10 +1014,15 @@ def _legacy_jax_pgd_implementation(
     **kwargs
 ) -> Tuple[List[Set[int]], Dict[str, Any]]:
     """
-    Legacy JAX-PGD implementation for backward compatibility.
+    Regularized JAX-PGD implementation with identity regularization support.
+    
+    Applies regularization A → A + cI to the adjacency matrix before optimization.
     """
     if verbose:
-        print(f"Legacy JAX-PGD: Finding maximal cliques with {num_restarts} restarts")
+        if regularization_c != 0.0:
+            print(f"Regularized JAX-PGD: Finding cliques with {num_restarts} restarts (c={regularization_c})")
+        else:
+            print(f"Standard JAX-PGD: Finding cliques with {num_restarts} restarts (no regularization)")
     
     # Import required modules
     try:
@@ -623,8 +1042,18 @@ def _legacy_jax_pgd_implementation(
     node_list = list(graph.nodes())
     adj_matrix = nx.to_numpy_array(graph, nodelist=node_list)
     
-    # Convert to polynomial format
-    poly_indices, poly_coefficients = adjacency_to_polynomial(adj_matrix)
+    # Apply regularization: A → A + cI
+    if regularization_c != 0.0:
+        regularized_matrix = adj_matrix + regularization_c * np.eye(len(node_list))
+        if verbose:
+            print(f"✅ Applied identity regularization: A + {regularization_c}I")
+    else:
+        regularized_matrix = adj_matrix
+        if verbose:
+            print("✅ Using standard adjacency matrix (no regularization)")
+    
+    # Convert regularized matrix to polynomial format
+    poly_indices, poly_coefficients = adjacency_to_polynomial(regularized_matrix)
     
     if len(poly_indices) == 0:
         if verbose:
@@ -968,16 +1397,18 @@ def compare_oracles_on_graph(
     oracle_types: List[str], 
     support_threshold: float = 1e-5,
     verbose: bool = False,
+    regularization_c: float = 0.1,
     **base_config
 ) -> Dict[str, Tuple[List[Set[int]], Dict[str, Any], float]]:
     """
-    Compare multiple oracles on the same graph.
+    Compare multiple oracles on the same graph with regularization.
     
     Args:
         graph: Input graph to analyze
         oracle_types: List of oracle types to compare
         support_threshold: Support extraction threshold
         verbose: Whether to print detailed progress
+        regularization_c: Regularization parameter for A → A + cI
         **base_config: Base configuration shared by oracles
         
     Returns:
@@ -1012,6 +1443,7 @@ def compare_oracles_on_graph(
                 support_threshold=support_threshold,
                 verbose=verbose,
                 enable_refinement=base_config.get('enable_refinement', True),
+                regularization_c=regularization_c,
                 **oracle_config
             )
             runtime = time.time() - start_time
@@ -1056,7 +1488,7 @@ def analyze_clique_coverage(found_cliques: List[Set[int]],
 def main():
     """Main function with CLI interface and testing."""
     parser = argparse.ArgumentParser(
-        description="Find maximal cliques using Motzkin-Straus theorem with multiple oracle solvers",
+        description="Find cliques using regularized Motzkin-Straus theorem with multiple oracle solvers",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -1069,6 +1501,8 @@ def main():
                        help="Oracle solver type (default: jax-pgd)")
     parser.add_argument("--compare-oracles", action="store_true",
                        help="Compare multiple oracles on same graphs")
+    parser.add_argument("--regularization-c", type=float, default=0.1,
+                       help="Regularization parameter for A → A + cI (default: 0.1)")
     parser.add_argument("--threshold", type=float, default=1e-3,
                        help="Support extraction threshold (default: 1e-5)")
     parser.add_argument("--verbose", "-v", action="store_true",
@@ -1169,7 +1603,7 @@ def main():
                 }
                 
                 oracle_results = compare_oracles_on_graph(
-                    graph, oracle_types, args.threshold, args.verbose, **base_config
+                    graph, oracle_types, args.threshold, args.verbose, args.regularization_c, **base_config
                 )
                 
                 # Report comparison results
@@ -1224,6 +1658,7 @@ def main():
                         support_threshold=args.threshold,
                         verbose=args.verbose,
                         enable_refinement=args.enable_refinement,
+                        regularization_c=args.regularization_c,
                         **oracle_config
                     )
                     
@@ -1315,7 +1750,7 @@ def main():
                     }
                     
                     oracle_results = compare_oracles_on_graph(
-                        graph, oracle_types, args.threshold, args.verbose, **base_config
+                        graph, oracle_types, args.threshold, args.verbose, args.regularization_c, **base_config
                     )
                     
                     # Report comparison results
@@ -1369,6 +1804,7 @@ def main():
                         support_threshold=args.threshold,
                         verbose=args.verbose,
                         enable_refinement=args.enable_refinement,
+                        regularization_c=args.regularization_c,
                         **oracle_config
                     )
                     

@@ -220,6 +220,162 @@ def verify_independent_set(graph: nx.Graph, candidate_set: Set[int]) -> bool:
     return True
 
 
+def verify_coloring_solution(graph: nx.Graph, coloring: List[FrozenSet[int]], 
+                           verbose: bool = False) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Verify that a coloring solution is valid for the given graph.
+    
+    A valid coloring must satisfy:
+    1. Each vertex appears in exactly one color class
+    2. Each color class is an independent set (no adjacent vertices have the same color)
+    3. All vertices in the graph are covered by the coloring
+    
+    Args:
+        graph: The input NetworkX graph
+        coloring: List of color classes, where each class is a frozenset of vertices
+        verbose: Enable detailed validation output
+        
+    Returns:
+        Tuple of (is_valid: bool, validation_details: dict)
+    """
+    if verbose:
+        print(f"Verifying coloring solution with {len(coloring)} colors for graph with {graph.number_of_nodes()} nodes")
+    
+    # Initialize validation results
+    validation_details = {
+        'is_valid': True,
+        'num_colors': len(coloring),
+        'num_vertices': graph.number_of_nodes(),
+        'errors': [],
+        'coverage_check': {},
+        'independence_check': {},
+        'vertex_assignments': {}
+    }
+    
+    if not coloring:
+        validation_details['is_valid'] = False
+        validation_details['errors'].append("Empty coloring provided")
+        if verbose:
+            print("  ERROR: Empty coloring provided")
+        return False, validation_details
+    
+    if graph.number_of_nodes() == 0:
+        # Empty graph should have empty or trivial coloring
+        if len(coloring) == 0 or (len(coloring) == 1 and len(coloring[0]) == 0):
+            if verbose:
+                print("  Valid: Empty graph with appropriate coloring")
+            return True, validation_details
+        else:
+            validation_details['is_valid'] = False
+            validation_details['errors'].append("Non-empty coloring for empty graph")
+            if verbose:
+                print("  ERROR: Non-empty coloring for empty graph")
+            return False, validation_details
+    
+    # Check 1: Verify each color class is an independent set
+    if verbose:
+        print(f"  Checking independence of {len(coloring)} color classes...")
+    
+    for color_idx, color_class in enumerate(coloring):
+        if not isinstance(color_class, (set, frozenset)):
+            validation_details['is_valid'] = False
+            validation_details['errors'].append(f"Color class {color_idx + 1} is not a set: {type(color_class)}")
+            if verbose:
+                print(f"    ERROR: Color class {color_idx + 1} is not a set: {type(color_class)}")
+            continue
+        
+        # Convert to regular set for processing
+        color_set = set(color_class)
+        
+        # Check if it's a valid independent set
+        is_independent = verify_independent_set(graph, color_set)
+        validation_details['independence_check'][f'color_{color_idx + 1}'] = {
+            'vertices': sorted(color_set),
+            'size': len(color_set),
+            'is_independent': is_independent
+        }
+        
+        if not is_independent:
+            validation_details['is_valid'] = False
+            validation_details['errors'].append(f"Color class {color_idx + 1} is not independent: {sorted(color_set)}")
+            if verbose:
+                print(f"    ERROR: Color class {color_idx + 1} is not independent: {sorted(color_set)}")
+                # Find the conflicting edges
+                conflicts = []
+                for u in color_set:
+                    for v in color_set:
+                        if u != v and graph.has_edge(u, v):
+                            conflicts.append((u, v))
+                if conflicts:
+                    print(f"      Conflicting edges: {conflicts[:5]}{'...' if len(conflicts) > 5 else ''}")
+        elif verbose:
+            print(f"    Color class {color_idx + 1}: {sorted(color_set)} - VALID independent set")
+    
+    # Check 2: Verify each vertex appears exactly once
+    if verbose:
+        print(f"  Checking vertex coverage...")
+    
+    vertex_color_assignments = {}  # vertex -> color_index
+    all_graph_vertices = set(graph.nodes())
+    all_colored_vertices = set()
+    
+    for color_idx, color_class in enumerate(coloring):
+        color_set = set(color_class)
+        
+        for vertex in color_set:
+            if vertex in vertex_color_assignments:
+                # Vertex appears in multiple color classes
+                validation_details['is_valid'] = False
+                other_color = vertex_color_assignments[vertex]
+                validation_details['errors'].append(f"Vertex {vertex} appears in multiple colors: {other_color + 1} and {color_idx + 1}")
+                if verbose:
+                    print(f"    ERROR: Vertex {vertex} appears in color classes {other_color + 1} and {color_idx + 1}")
+            else:
+                vertex_color_assignments[vertex] = color_idx
+                all_colored_vertices.add(vertex)
+    
+    # Check for vertices not in any color class
+    uncovered_vertices = all_graph_vertices - all_colored_vertices
+    if uncovered_vertices:
+        validation_details['is_valid'] = False
+        validation_details['errors'].append(f"Vertices not covered by any color: {sorted(uncovered_vertices)}")
+        if verbose:
+            print(f"    ERROR: Uncovered vertices: {sorted(uncovered_vertices)}")
+    
+    # Check for vertices in coloring but not in graph
+    extra_vertices = all_colored_vertices - all_graph_vertices
+    if extra_vertices:
+        validation_details['is_valid'] = False
+        validation_details['errors'].append(f"Vertices in coloring but not in graph: {sorted(extra_vertices)}")
+        if verbose:
+            print(f"    ERROR: Extra vertices in coloring: {sorted(extra_vertices)}")
+    
+    # Store coverage information
+    validation_details['coverage_check'] = {
+        'total_graph_vertices': len(all_graph_vertices),
+        'total_colored_vertices': len(all_colored_vertices),
+        'uncovered_vertices': sorted(uncovered_vertices),
+        'extra_vertices': sorted(extra_vertices),
+        'proper_coverage': len(uncovered_vertices) == 0 and len(extra_vertices) == 0
+    }
+    
+    validation_details['vertex_assignments'] = {v: c + 1 for v, c in vertex_color_assignments.items()}
+    
+    # Summary
+    if validation_details['is_valid']:
+        if verbose:
+            print(f"  VALIDATION SUCCESS: Coloring is valid with {len(coloring)} colors")
+            print(f"    All {len(all_graph_vertices)} vertices properly colored")
+            print(f"    All {len(coloring)} color classes are independent sets")
+    else:
+        if verbose:
+            print(f"  VALIDATION FAILED: {len(validation_details['errors'])} errors found")
+            for error in validation_details['errors']:
+                print(f"    - {error}")
+    
+    return validation_details['is_valid'], validation_details
+
+
 class ClassicalPricingSubproblemSolver:
     """
     Classical Pricing Subproblem Solver using scipy MILP.
@@ -799,7 +955,8 @@ class ClassicalColumnGenerationSolver:
             'psp_time': 0.0,
             'iterations': 0,
             'columns_generated': 0,
-            'psp_calls': 0
+            'psp_calls': 0,
+            'solution_valid': False
         }
     
     def solve(self, graph: nx.Graph) -> Tuple[Optional[int], List[FrozenSet[int]], Dict[str, Any]]:
@@ -913,6 +1070,22 @@ class ClassicalColumnGenerationSolver:
                 coloring_solution.append(color_set)
         
         num_colors = len(coloring_solution) if final_result['success'] else None
+        
+        # Validate the coloring solution
+        if coloring_solution:
+            is_valid, validation_details = verify_coloring_solution(graph, coloring_solution, verbose=self.verbose)
+            if not is_valid:
+                if self.verbose:
+                    print(f"WARNING: Coloring solution validation failed!")
+                # Still return the solution but mark it as invalid in stats
+                self.solving_stats['solution_valid'] = False
+                self.solving_stats['validation_errors'] = validation_details['errors']
+            else:
+                if self.verbose:
+                    print(f"✓ Coloring solution validation passed")
+                self.solving_stats['solution_valid'] = True
+        else:
+            self.solving_stats['solution_valid'] = False
         
         if self.verbose:
             print(f"\n--- Solution Summary ---")
@@ -1083,7 +1256,8 @@ class QuantumColumnGenerationSolver:
             'psp_time': 0.0,
             'iterations': 0,
             'columns_generated': 0,
-            'oracle_calls': 0
+            'oracle_calls': 0,
+            'solution_valid': False
         }
     
     def solve(self, graph: nx.Graph) -> Tuple[Optional[int], List[FrozenSet[int]], Dict[str, Any]]:
@@ -1217,6 +1391,22 @@ class QuantumColumnGenerationSolver:
                 coloring_solution.append(color_set)
         
         num_colors = len(coloring_solution) if final_result['success'] else None
+        
+        # Validate the coloring solution
+        if coloring_solution:
+            is_valid, validation_details = verify_coloring_solution(graph, coloring_solution, verbose=self.verbose)
+            if not is_valid:
+                if self.verbose:
+                    print(f"WARNING: Coloring solution validation failed!")
+                # Still return the solution but mark it as invalid in stats
+                self.solving_stats['solution_valid'] = False
+                self.solving_stats['validation_errors'] = validation_details['errors']
+            else:
+                if self.verbose:
+                    print(f"✓ Coloring solution validation passed")
+                self.solving_stats['solution_valid'] = True
+        else:
+            self.solving_stats['solution_valid'] = False
         
         if self.verbose:
             print(f"\n--- Solution Summary ---")

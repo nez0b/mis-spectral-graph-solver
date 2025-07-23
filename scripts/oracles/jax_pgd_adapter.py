@@ -13,6 +13,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from .base import OracleAdapter, OracleConfig
 
+# Import refinement methods from parent directory
+sys.path.insert(0, os.path.dirname(__file__))
+try:
+    from clique_instance import refine_solution_vector
+except ImportError:
+    # Fallback for direct execution
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from clique_instance import refine_solution_vector
+
 # Try to import JAX and motzkinstraus modules
 try:
     from motzkinstraus.jax_optimizers import (
@@ -230,11 +239,17 @@ class JAXPGDAdapter(OracleAdapter):
                 # Superposition solution: attempt refinement if enabled
                 if self.enable_refinement and len(support_indices) > 1:  # Only refine non-trivial supports
                     if self.verbose:
-                        print(f"  Not a valid clique - attempting superposition refinement")
+                        print(f"  Not a valid clique - attempting unified solution refinement")
                     
                     try:
-                        refined_cliques = self.refine_superposition_solution(
-                            graph, solution_vector, support_indices
+                        # Use unified solution refinement to extract valid cliques
+                        refined_cliques = refine_solution_vector(
+                            solution_vector=solution_vector,
+                            graph=graph,
+                            weights=None,  # JAX-PGD uses uniform weights for clique problems
+                            threshold=support_threshold,
+                            max_exact_size=20,
+                            debug=self.verbose
                         )
                         
                         for refined_clique in refined_cliques:
@@ -247,11 +262,14 @@ class JAXPGDAdapter(OracleAdapter):
                                         print(f"  Refined to maximal clique: {sorted(refined_clique)}")
                         
                         if self.verbose:
-                            print(f"  Refinement yielded {len(refined_cliques)} cliques")
+                            if refined_cliques:
+                                print(f"  Refinement succeeded: extracted {len(refined_cliques)} valid cliques")
+                            else:
+                                print(f"  Refinement failed: no valid cliques found")
                             
                     except Exception as e:
                         if self.verbose:
-                            print(f"  Refinement failed: {e}")
+                            print(f"  Refinement failed with error: {e}")
                 else:
                     if self.verbose:
                         refinement_status = "disabled" if not self.enable_refinement else "trivial support"
