@@ -337,20 +337,236 @@ class DiracAdapter(OracleAdapter):
                 
                 # Check if energy is close to theoretical
                 if abs(best_energy - theoretical_optimal) < 0.01:
-                    print(f"  ✓ Energy matches theoretical expectation!")
+                    print(f"  PASS: Energy matches theoretical expectation!")
                 else:
-                    print(f"  ⚠ Energy differs significantly from theoretical!")
+                    print(f"  WARNING: Energy differs significantly from theoretical!")
                     
             else:
                 print(f"  Note: General graph - no theoretical optimum calculated")
             
             # Check for negative energies (could indicate coefficient negation issues)
             if best_energy < 0:
-                print(f"  ⚠ WARNING: Negative energy detected - possible coefficient negation issue!")
+                print(f"  WARNING: Negative energy detected - possible coefficient negation issue!")
             
             # Check energy range
             energy_range = max(all_energies) - min(all_energies)
             print(f"  Energy range: {energy_range:.8f}")
+    
+    def _print_detailed_support_analysis(
+        self, 
+        solution_vector: np.ndarray, 
+        node_list: List[int], 
+        support_threshold: float,
+        weights: Optional[Dict[int, float]] = None,
+        solution_index: int = 0
+    ) -> None:
+        """
+        Print detailed analysis of solution vector support values for threshold determination.
+        
+        Args:
+            solution_vector: Solution vector from Dirac
+            node_list: List of node IDs corresponding to vector indices
+            support_threshold: Current threshold for support extraction
+            weights: Optional node weights for analysis
+            solution_index: Index of this solution for labeling
+        """
+        if not self.verbose or len(solution_vector) == 0:
+            return
+            
+        print(f"  Detailed support analysis for solution {solution_index + 1}:")
+        
+        # Show full solution vector with node labels
+        vector_str = "    Full vector: ["
+        for i, (node_id, value) in enumerate(zip(node_list, solution_vector)):
+            if i > 0:
+                vector_str += ", "
+            vector_str += f"x{node_id}={value:.6f}"
+            if i >= 10 and len(solution_vector) > 12:  # Truncate very long vectors
+                vector_str += f", ... ({len(solution_vector) - 11} more)"
+                break
+        vector_str += "]"
+        print(vector_str)
+        
+        # Analyze values above and below threshold
+        above_threshold = {}
+        below_threshold = {}
+        
+        for i, (node_id, value) in enumerate(zip(node_list, solution_vector)):
+            if value > support_threshold:
+                above_threshold[node_id] = value
+            else:
+                below_threshold[node_id] = value
+        
+        # Print above threshold values (support)
+        if above_threshold:
+            print(f"    Above threshold ({support_threshold}): {{", end="")
+            sorted_above = sorted(above_threshold.items(), key=lambda x: x[1], reverse=True)
+            above_parts = []
+            for node_id, value in sorted_above:
+                above_parts.append(f"{node_id}: {value:.6f}")
+            print(", ".join(above_parts) + "}")
+        else:
+            print(f"    Above threshold ({support_threshold}): (none)")
+            
+        # Print below threshold values
+        if below_threshold and len(below_threshold) <= 10:  # Only show if reasonable number
+            print(f"    Below threshold: {{", end="")
+            sorted_below = sorted(below_threshold.items(), key=lambda x: x[1], reverse=True)
+            below_parts = []
+            for node_id, value in sorted_below:
+                below_parts.append(f"{node_id}: {value:.6f}")
+            print(", ".join(below_parts) + "}")
+        elif below_threshold:
+            max_below = max(below_threshold.values())
+            min_below = min(below_threshold.values())
+            print(f"    Below threshold: {len(below_threshold)} values (range: {min_below:.6f} to {max_below:.6f})")
+        
+        # Weight analysis if weights provided
+        if weights and above_threshold:
+            print("    Weight analysis for support nodes:")
+            total_weight = 0
+            for node_id in above_threshold:
+                weight = weights.get(node_id, 1.0)
+                value = above_threshold[node_id]
+                total_weight += weight
+                print(f"      node{node_id}: weight={weight:.3f}, x={value:.6f}, weighted_x={weight*value:.6f}")
+            print(f"      Total support weight: {total_weight:.3f}")
+        
+        # Threshold sensitivity analysis
+        test_thresholds = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2]
+        print("    Threshold sensitivity:")
+        for test_thresh in test_thresholds:
+            support_count = np.sum(solution_vector > test_thresh)
+            marker = " <-- current" if abs(test_thresh - support_threshold) < 1e-9 else ""
+            print(f"      {test_thresh}: {support_count} nodes{marker}")
+    
+    def analyze_threshold_sensitivity(
+        self,
+        solutions: List[np.ndarray],
+        node_list: List[int],
+        graph: nx.Graph,
+        weights: Optional[Dict[int, float]] = None,
+        test_thresholds: List[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze how different threshold values affect support extraction and clique finding.
+        
+        Args:
+            solutions: List of solution vectors from Dirac
+            node_list: List of node IDs corresponding to vector indices
+            graph: Original graph for clique validation
+            weights: Optional node weights
+            test_thresholds: List of thresholds to test (default: [1e-6, 1e-5, 1e-4, 1e-3, 1e-2])
+            
+        Returns:
+            Dictionary with threshold analysis results
+        """
+        if test_thresholds is None:
+            test_thresholds = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2]
+        
+        if not solutions:
+            return {"error": "No solutions provided for analysis"}
+        
+        print("Threshold Sensitivity Analysis")
+        print("=" * 50)
+        
+        analysis_results = {}
+        
+        for threshold in test_thresholds:
+            print(f"\nAnalyzing threshold: {threshold}")
+            print("-" * 30)
+            
+            # Extract cliques for this threshold
+            found_cliques_at_threshold = set()
+            total_support_nodes = 0
+            valid_solutions = 0
+            
+            for i, solution_vector in enumerate(solutions):
+                # Extract support at this threshold
+                support_indices = set(np.where(solution_vector > threshold)[0].tolist())
+                total_support_nodes += len(support_indices)
+                
+                if support_indices:
+                    # Map to node IDs
+                    candidate_clique = {node_list[idx] for idx in support_indices if idx < len(node_list)}
+                    
+                    # Verify if it's a valid clique
+                    if self.verify_clique(graph, candidate_clique):
+                        found_cliques_at_threshold.add(frozenset(candidate_clique))
+                        valid_solutions += 1
+            
+            # Calculate statistics
+            avg_support_size = total_support_nodes / len(solutions) if solutions else 0
+            unique_cliques = len(found_cliques_at_threshold)
+            success_rate = valid_solutions / len(solutions) if solutions else 0
+            
+            # Calculate weights of found cliques
+            clique_weights = []
+            if weights:
+                for clique in found_cliques_at_threshold:
+                    clique_weight = sum(weights.get(node, 1.0) for node in clique)
+                    clique_weights.append(clique_weight)
+            
+            print(f"  Average support size: {avg_support_size:.2f} nodes")
+            print(f"  Valid solutions: {valid_solutions}/{len(solutions)} ({success_rate:.1%})")
+            print(f"  Unique valid cliques: {unique_cliques}")
+            
+            if clique_weights:
+                max_weight = max(clique_weights)
+                min_weight = min(clique_weights)
+                avg_weight = sum(clique_weights) / len(clique_weights)
+                print(f"  Clique weight range: {min_weight:.3f} to {max_weight:.3f} (avg: {avg_weight:.3f})")
+            
+            # Store results
+            analysis_results[threshold] = {
+                'avg_support_size': avg_support_size,
+                'valid_solutions': valid_solutions,
+                'success_rate': success_rate,
+                'unique_cliques': unique_cliques,
+                'clique_weights': clique_weights,
+                'found_cliques': [set(clique) for clique in found_cliques_at_threshold]
+            }
+        
+        # Provide recommendations
+        print(f"\nThreshold Recommendations")
+        print("=" * 30)
+        
+        # Find threshold with highest success rate
+        best_success_threshold = max(analysis_results.keys(), 
+                                   key=lambda t: analysis_results[t]['success_rate'])
+        
+        # Find threshold with most unique cliques
+        best_diversity_threshold = max(analysis_results.keys(), 
+                                     key=lambda t: analysis_results[t]['unique_cliques'])
+        
+        print(f"Best success rate: {best_success_threshold} "
+              f"({analysis_results[best_success_threshold]['success_rate']:.1%} valid solutions)")
+        print(f"Best diversity: {best_diversity_threshold} "
+              f"({analysis_results[best_diversity_threshold]['unique_cliques']} unique cliques)")
+        
+        if weights:
+            # Find threshold with best maximum weight
+            best_weight_threshold = None
+            best_max_weight = -1
+            
+            for threshold, results in analysis_results.items():
+                if results['clique_weights']:
+                    max_weight = max(results['clique_weights'])
+                    if max_weight > best_max_weight:
+                        best_max_weight = max_weight
+                        best_weight_threshold = threshold
+            
+            if best_weight_threshold:
+                print(f"Best max weight: {best_weight_threshold} "
+                      f"(max clique weight: {best_max_weight:.3f})")
+        
+        analysis_results['recommendations'] = {
+            'best_success_rate': best_success_threshold,
+            'best_diversity': best_diversity_threshold,
+            'best_weight': best_weight_threshold if weights else None
+        }
+        
+        return analysis_results
     
     def _qplib_to_polynomial_file_gibbons(self, qplib_data: Dict[str, Any], file_name: str) -> Dict[str, Any]:
         """
@@ -419,7 +635,7 @@ class DiracAdapter(OracleAdapter):
             }
             
             if self.verbose:
-                print(f"✅ Created Gibbons QCI polynomial file config with {len(data)} terms (NO negation)")
+                print(f"Created Gibbons QCI polynomial file config with {len(data)} terms (NO negation)")
             
             return file_config
             
@@ -430,7 +646,8 @@ class DiracAdapter(OracleAdapter):
         self, 
         graph: nx.Graph,
         solutions: List[np.ndarray], 
-        support_threshold: float = 1e-5
+        support_threshold: float = 1e-5,
+        weights: Optional[Dict[int, float]] = None
     ) -> List[Set[int]]:
         """
         Extract maximal cliques from Dirac solution vectors.
@@ -439,6 +656,7 @@ class DiracAdapter(OracleAdapter):
             graph: Original graph
             solutions: List of solution vectors from Dirac
             support_threshold: Threshold for support extraction
+            weights: Optional node weights for detailed analysis
             
         Returns:
             List of valid cliques found
@@ -452,6 +670,11 @@ class DiracAdapter(OracleAdapter):
                 print(f"  Solution sum: {np.sum(solution_vector):.6f}")
                 print(f"  Solution max: {np.max(solution_vector):.6f}")
                 print(f"  Non-zero entries: {np.sum(solution_vector > support_threshold)}")
+            
+            # Print detailed support analysis for debugging
+            self._print_detailed_support_analysis(
+                solution_vector, node_list, support_threshold, weights, i
+            )
             
             # Extract support (candidate clique vertices)
             support_indices = self.extract_support(solution_vector, support_threshold)
@@ -572,7 +795,7 @@ class DiracAdapter(OracleAdapter):
             
             # Extract cliques from all solution vectors
             found_cliques = self._extract_cliques_from_dirac_response(
-                graph, self.last_solutions, support_threshold
+                graph, self.last_solutions, support_threshold, weights
             )
             
             if self.verbose:

@@ -227,7 +227,7 @@ class OracleFactory:
         if verbose:
             result = []
             for oracle_type, info in available_oracles.items():
-                status = "✓" if info['available'] else "✗"
+                status = "AVAILABLE" if info['available'] else "UNAVAILABLE"
                 result.append(f"{status} {oracle_type}: {info['description']}")
             return result
         else:

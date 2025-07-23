@@ -255,7 +255,7 @@ def plot_graph_with_dual_mwis_solutions(
     
     # Title
     solutions_match = milp_set == jax_set
-    match_text = "✓ MATCH" if solutions_match else "✗ DIFFER"
+    match_text = "MATCH" if solutions_match else "DIFFER"
     
     plt.title(f"{title}\\n" + 
               f"MILP: {milp_set} (weight: {milp_weight:.3f})\\n" + 
@@ -1025,14 +1025,14 @@ def debug_motzkin_straus_objective_values(
         weight_extract_match = extraction_discrepancy < tolerance
         
         print("VALIDATION RESULTS:")
-        print(f"  Objective values agree (tol={tolerance}): {'✓' if objective_match else '✗'}")
-        print(f"  Theoretical weights agree (tol={tolerance}): {'✓' if weight_theory_match else '✗'}")
-        print(f"  Extracted weights agree (tol={tolerance}): {'✓' if weight_extract_match else '✗'}")
+        print(f"  Objective values agree (tol={tolerance}): {'PASS' if objective_match else 'FAIL'}")
+        print(f"  Theoretical weights agree (tol={tolerance}): {'PASS' if weight_theory_match else 'FAIL'}")
+        print(f"  Extracted weights agree (tol={tolerance}): {'PASS' if weight_extract_match else 'FAIL'}")
         
         if objective_match and weight_theory_match:
-            print("  STATUS: ✓ MOTZKIN-STRAUS OPTIMIZATION IS MATHEMATICALLY CORRECT")
+            print("  STATUS: PASS - MOTZKIN-STRAUS OPTIMIZATION IS MATHEMATICALLY CORRECT")
         elif not objective_match:
-            print("  STATUS: ✗ MOTZKIN-STRAUS OBJECTIVE VALUE IS INCORRECT")
+            print("  STATUS: FAIL - MOTZKIN-STRAUS OBJECTIVE VALUE IS INCORRECT")
         else:
             print("  STATUS: ⚠ OBJECTIVE CORRECT BUT WEIGHT EXTRACTION ISSUES")
         
@@ -1124,9 +1124,9 @@ def test_mwis_debug_objectives():
         print("-" * 90)
         for r in debug_results:
             if 'error' not in r:
-                obj_match = "✓" if r['objective_match'] else "✗"
-                wt_match = "✓" if r['weight_theory_match'] else "✗"
-                we_match = "✓" if r['weight_extract_match'] else "✗"
+                obj_match = "PASS" if r['objective_match'] else "FAIL"
+                wt_match = "PASS" if r['weight_theory_match'] else "FAIL"
+                we_match = "PASS" if r['weight_extract_match'] else "FAIL"
                 print(f"{r['name']:<20} {obj_match:<10} {wt_match:<10} {we_match:<10} "
                       f"{r['objective_discrepancy']:<12.8f} {r['weight_discrepancy']:<12.8f} {r['extraction_discrepancy']:<12.8f}")
             else:
@@ -1177,9 +1177,9 @@ def test_mwis_with_dual_comparison():
         print("  DEBUG: Objective Value Analysis:")
         debug_result = debug_motzkin_straus_objective_values(graph, weights, verbose=False)
         if 'error' not in debug_result:
-            obj_match = "✓" if debug_result['objective_match'] else "✗"
-            weight_theory_match = "✓" if debug_result['weight_theory_match'] else "✗"
-            weight_extract_match = "✓" if debug_result['weight_extract_match'] else "✗"
+            obj_match = "PASS" if debug_result['objective_match'] else "FAIL"
+            weight_theory_match = "PASS" if debug_result['weight_theory_match'] else "FAIL"
+            weight_extract_match = "PASS" if debug_result['weight_extract_match'] else "FAIL"
             
             print(f"    MILP optimal weight: {debug_result['milp_optimal_weight']:.6f}")
             print(f"    JAX raw objective: {debug_result['jax_raw_objective']:.8f}")
@@ -1263,8 +1263,8 @@ def test_mwis_with_dual_comparison():
         print(f"{'Graph':<20} {'MILP Weight':<12} {'JAX Weight':<12} {'W.Match':<8} {'S.Match':<8} {'MILP(s)':<8} {'JAX(s)':<8}")
         print("-" * 80)
         for r in results:
-            w_match = "✓" if r['weight_match'] else "✗"
-            s_match = "✓" if r['sets_match'] else "✗"
+            w_match = "PASS" if r['weight_match'] else "FAIL"
+            s_match = "PASS" if r['sets_match'] else "FAIL"
             print(f"{r['name']:<20} {r['milp_weight']:<12.3f} {r['jax_weight']:<12.3f} "
                   f"{w_match:<8} {s_match:<8} {r['milp_time']:<8.4f} {r['jax_time']:<8.4f}")
     
