@@ -30,6 +30,14 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
+import matplotlib.font_manager as fm
+from matplotlib import rcParams
+fm.fontManager.addfont('OpenSans-Light.ttf')
+rcParams['font.family'] = 'Open Sans'
+rcParams['font.size'] = 15
+rcParams['font.weight'] = 'light'
+rcParams['mathtext.fontset'] = 'cm'
+
 
 # =============================================================================
 # OMEGA CALCULATION FUNCTIONS (copied from graph_to_omega.py)
@@ -197,6 +205,7 @@ def extract_energies_and_metadata(response_data: Dict[str, Any]) -> Tuple[List[f
         metadata = {
             'job_id': response_data.get('job_info', {}).get('job_id', 'unknown'),
             'job_name': response_data.get('job_info', {}).get('job_submission', {}).get('job_name', 'unknown'),
+            'relax_schedule': response_data.get('job_info', {}).get('job_submission', {}).get("device_config", {}).get("dirac-3_normalized_qudit", {}).get("relaxation_schedule", "unknown"),
             'status': response_data.get('status', 'unknown'),
             'num_samples': len(energies),
             'best_energy': min(energies),
@@ -336,15 +345,18 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
         if in_data_range:
             ax.axvline(x=energy_val, color='#7f7f7f', linestyle='--', 
                       alpha=0.8, zorder=2, linewidth=1.5)
-            ax.text(energy_val, y_max * 0.9, f' ω={omega}',
+            ax.text(energy_val, y_max * 0.9, rf' $\omega$={omega}',
                    rotation=90, verticalalignment='bottom', 
-                   color='#7f7f7f', fontsize=9, fontweight='bold')
+                   color='#7f7f7f', fontsize=12, fontweight='bold')
             lines_added += 1
             
             # Extend plot x-axis to ensure theoretical line is visible
             current_xlim = ax.get_xlim()
-            new_x_min = min(current_xlim[0], energy_val * 1.001)
+            new_x_min = min(current_xlim[0]*1.0001, energy_val * 1.001)
             new_x_max = max(current_xlim[1], energy_val * 0.999)
+            # new_x_min = current_xlim[0]*0.9
+            # new_x_max = current_xlim[1]*1.1
+            print(f"Extending plot x-axis to: {new_x_min} to {new_x_max}")
             ax.set_xlim(new_x_min, new_x_max)
     
     if lines_added > 0:
@@ -356,9 +368,9 @@ def add_theory_lines(ax, energies: List[float], show_theory_lines: bool = False,
             formula_text = r'$E = -\frac{1}{2}(1-\frac{1}{\omega})$'
             label_text = 'Theoretical Energy (ω)'
             
-        ax.text(0.05, 0.95, formula_text, transform=ax.transAxes,
+        ax.text(0.02, 0.95, formula_text, transform=ax.transAxes,
                 fontsize=11, verticalalignment='top', fontweight='bold',
-                bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.8))
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.5))
         
         # Add single legend entry for all theory lines
         ax.plot([], [], color='#7f7f7f', linestyle='--', alpha=0.8, 
@@ -403,6 +415,7 @@ def plot_energy_histogram(
         best_energy = metadata['best_energy']
         job_name = metadata.get('job_name', 'Unknown Job')
         num_samples = metadata['num_samples']
+        relax_schedule = metadata['relax_schedule']
         
         # Calculate omega from best energy using appropriate formula
         if regularization_c is not None:
@@ -419,14 +432,14 @@ def plot_energy_histogram(
         
         # Add enhanced theoretical omega lines if requested
         theory_added = add_theory_lines(plt.gca(), energies, show_theory_lines, regularization_c=regularization_c)
-        plt.xlim(min(energies) - 0.005, max(energies) + 0.005)
+        # plt.xlim(min(energies) + 0.005, max(energies) - 0.005)
         
         plt.xlabel('Energy', fontsize=12)
         plt.ylabel('Frequency', fontsize=12)
         
         # Enhanced title with more information
         title = f'{job_name}: Energy Distribution'
-        subtitle = f'Samples: {num_samples} | Best Energy: {best_energy:.6f} | Estimated ω: {omega:.2f}'
+        subtitle = f'Samples: {num_samples} | Best Energy: {best_energy:.6f} | Estimated ω: {omega:.2f} | Relax Schedule: {relax_schedule}'
         plt.title(f'{title}\n{subtitle}', fontsize=14, fontweight='bold')
         
         plt.legend(fontsize=10)

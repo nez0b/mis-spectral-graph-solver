@@ -417,7 +417,7 @@ class DiracOracleOmegaSolver(OmegaSolver):
                 return []
             
             # Find the most recent Dirac response file
-            json_files = list(data_path.glob("dirac_response_*.json"))
+            json_files = list(data_path.glob("dirac_*.json"))
             if not json_files:
                 return []
             

@@ -62,7 +62,7 @@ OMEGA_SOLVERS = [
     "gurobi_milp",       # Gurobi MILP (Direct combinatorial)
     # "scipy_milp",        # SciPy MILP (Direct combinatorial)
     # "networkx_exact",    # NetworkX exact (small graphs only)
-    # "dirac_oracle",      # Dirac Oracle
+    "dirac_oracle",      # Dirac Oracle
     # "dirac_pgd_hybrid",  # Dirac-PGD Hybrid Oracle (best of both worlds)
 ]
 
@@ -94,15 +94,15 @@ OMEGA_CONFIG = {
     # Dirac configuration
     'dirac_config': {
         'num_samples': 100,                # Number of quantum annealing samples
-        'relax_schedule': 4,              # Relaxation schedule parameter
+        'relax_schedule': 2,              # Relaxation schedule parameter
         'solution_precision': None,       # Solution precision
         'sum_constraint': 1,              # Simplex constraint (default)
         'mean_photon_number': None,     # Example: Override default photon number
-        'quantum_fluctuation_coefficient': 1,  # Example: Override default fluctuation
+        'quantum_fluctuation_coefficient': None,  # Example: Override default fluctuation
         'save_raw_data': True,            # Save raw response from Dirac solver
         'raw_data_path': 'data',           # Directory to save raw data files
         # Batch collection parameters (for collecting >100 samples)
-        'num_batch_runs': 5,              # Number of API calls to make (default: 1 for compatibility)
+        'num_batch_runs': 1,              # Number of API calls to make (default: 1 for compatibility)
         'batch_size': 100,                # Samples per API call (max: 100)
         'combine_batch_results': True,    # Whether to aggregate results across batches
         'batch_delay': 1.0,               # Delay between API calls in seconds (rate limiting)
@@ -358,7 +358,7 @@ def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bo
             print(f"Warning: Data directory {data_dir} does not exist")
             return False
         
-        json_files = list(data_path.glob("dirac_response_*.json"))
+        json_files = list(data_path.glob("dirac_*.json"))
         if not json_files:
             print(f"Warning: No Dirac response files found in {data_dir}")
             return False
@@ -370,7 +370,29 @@ def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bo
         # Load the JSON data
         with open(latest_file, 'r') as f:
             response = json.load(f)
+
+        # Rename the file to include the graph name for better identification
+        # Original format: "dirac_response_{timestamp}_{n_vars}vars.json" 
+        # New format: "dirac_response_{timestamp}_{n_vars}vars_{graph_name}.json"
+        graph_name_clean = graph_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        new_filename = f"{latest_file.stem}_{graph_name_clean}.json"
+        new_file_path = latest_file.parent / new_filename
         
+        # Only rename if the new filename doesn't already exist
+        if not new_file_path.exists():
+            try:
+                latest_file.rename(new_file_path)
+                print(f"📝 Renamed file to: {new_filename}")
+                latest_file = new_file_path  # Update the reference to the new file
+            except OSError as e:
+                print(f"Warning: Could not rename file: {e}")
+                # Continue with the original file if rename fails
+        else:
+            print(f"📁 File with graph name already exists: {new_filename}")
+            latest_file = new_file_path  # Use the existing renamed file
+        
+
+
         # Extract energies from the response
         if "results" in response and "energies" in response["results"]:
             energies = response["results"]["energies"]
@@ -431,7 +453,7 @@ def plot_energy_histogram(graph_name: str, data_dir: str = "data", show_plot: bo
             
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.xlim(min(energies) - 0.01, max(energies) + 0.01)
+            # plt.xlim(min(energies) - 0.01, max(energies) + 0.01)
             
             # Save the plot
             plot_file = data_path / f"energy_histogram_{graph_name.replace(' ', '_')}.png"
@@ -610,19 +632,19 @@ Examples:
             dirac_results = results.get("Dirac Oracle", (0, 0.0, False, ""))
             if dirac_results[2]:  # If Dirac solver was successful
                 if not args.quiet:
-                    print(f"\n📊 Creating energy histogram...")
+                    print(f"\n Creating energy histogram...")
                 plot_energy_histogram(graph_name, 
                                     data_dir=OMEGA_CONFIG['dirac_config'].get('raw_data_path', 'data'),
                                     show_plot=not args.quiet,
                                     show_theory_lines=args.show_theory)
         
         if not args.quiet:
-            print(f"\n🎉 ω computation completed successfully!")
+            print(f"\n ω computation completed successfully!")
         
         return 0
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f" Error: {e}")
         return 1
 
 

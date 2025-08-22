@@ -226,8 +226,8 @@ class DiracOracle(Oracle):
             save_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate filename with timestamp and problem size
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = save_dir / f"dirac_response_{timestamp}_{n_vars}vars.json"
+            timestamp = time.strftime("%Y%m%d_%H%M")
+            filename = save_dir / f"dirac_{timestamp}_{n_vars}nodes_ns{self.num_samples}_rs{self.relax_schedule}.json"
             
             # Convert numpy arrays to lists for JSON serialization
             def convert_for_json(obj):
